@@ -35,7 +35,8 @@ import {
   X,
   MessageSquare,
   ShieldCheck,
-  Coins
+  Coins,
+  RotateCcw
 } from "lucide-react";
 import { 
   getBarangayAccounts, 
@@ -45,54 +46,13 @@ import {
   reviewDocumentSubmission, 
   getAppNotifications, 
   addAppNotification, 
-  MUNICIPAL_BARANGAYS_40 
+  MUNICIPAL_BARANGAYS_40,
+  resetAllBarangays
 } from "../lib/barangayStore";
 import { BarangayAccount, DocumentSubmissionItem, AppNotification } from "../types";
 import { DocumentArchiveManager } from "../components/archive/DocumentArchiveManager";
 
-// List of all 40 barangays under the municipality of the prototype
-const BARANGAYS_40 = [
-  { name: "Poblacion", status: "Compliant", abyip: "Approved", cbydp: "Approved", minutes: "Completed", score: 95 },
-  { name: "San Jose", status: "Compliant", abyip: "Approved", cbydp: "Approved", minutes: "Completed", score: 92 },
-  { name: "Santa Maria", status: "Pending Review", abyip: "Pending", cbydp: "Approved", minutes: "Completed", score: 84 },
-  { name: "San Vicente", status: "Compliant", abyip: "Approved", cbydp: "Approved", minutes: "Completed", score: 90 },
-  { name: "San Pedro", status: "Incomplete", abyip: "Missing", cbydp: "Approved", minutes: "Completed", score: 65 },
-  { name: "Santo Domingo", status: "Compliant", abyip: "Approved", cbydp: "Approved", minutes: "Completed", score: 98 },
-  { name: "Concepcion", status: "Compliant", abyip: "Approved", cbydp: "Approved", minutes: "Completed", score: 91 },
-  { name: "San Juan", status: "Overdue", abyip: "Missing", cbydp: "Missing", minutes: "Missing", score: 0 },
-  { name: "Santa Ana", status: "Compliant", abyip: "Approved", cbydp: "Approved", minutes: "Completed", score: 94 },
-  { name: "San Andres", status: "Pending Review", abyip: "Approved", cbydp: "Pending", minutes: "Completed", score: 81 },
-  { name: "San Mateo", status: "Incomplete", abyip: "Pending", cbydp: "Missing", minutes: "Completed", score: 58 },
-  { name: "San Isidro", status: "Compliant", abyip: "Approved", cbydp: "Approved", minutes: "Completed", score: 96 },
-  { name: "Magsaysay", status: "Compliant", abyip: "Approved", cbydp: "Approved", minutes: "Completed", score: 93 },
-  { name: "Quezon", status: "Pending Review", abyip: "Pending", cbydp: "Pending", minutes: "Completed", score: 78 },
-  { name: "Rizal", status: "Compliant", abyip: "Approved", cbydp: "Approved", minutes: "Completed", score: 89 },
-  { name: "Baler", status: "Incomplete", abyip: "Approved", cbydp: "Missing", minutes: "Completed", score: 70 },
-  { name: "Maligno", status: "Compliant", abyip: "Approved", cbydp: "Approved", minutes: "Completed", score: 92 },
-  { name: "San Francisco", status: "Compliant", abyip: "Approved", cbydp: "Approved", minutes: "Completed", score: 95 },
-  { name: "San Roque", status: "Pending Review", abyip: "Approved", cbydp: "Pending", minutes: "Completed", score: 82 },
-  { name: "Santa Catalina", status: "Compliant", abyip: "Approved", cbydp: "Approved", minutes: "Completed", score: 97 },
-  { name: "Santa Rosa", status: "Overdue", abyip: "Missing", cbydp: "Missing", minutes: "Missing", score: 0 },
-  { name: "Santiago", status: "Compliant", abyip: "Approved", cbydp: "Approved", minutes: "Completed", score: 90 },
-  { name: "San Agustin", status: "Compliant", abyip: "Approved", cbydp: "Approved", minutes: "Completed", score: 91 },
-  { name: "Santo Tomas", status: "Compliant", abyip: "Approved", cbydp: "Approved", minutes: "Completed", score: 94 },
-  { name: "Lucban", status: "Incomplete", abyip: "Missing", cbydp: "Approved", minutes: "Completed", score: 62 },
-  { name: "San Miguel", status: "Compliant", abyip: "Approved", cbydp: "Approved", minutes: "Completed", score: 96 },
-  { name: "Del Pilar", status: "Pending Review", abyip: "Pending", cbydp: "Approved", minutes: "Completed", score: 80 },
-  { name: "Caloocan", status: "Compliant", abyip: "Approved", cbydp: "Approved", minutes: "Completed", score: 92 },
-  { name: "San Antonio", status: "Compliant", abyip: "Approved", cbydp: "Approved", minutes: "Completed", score: 88 },
-  { name: "Malabon", status: "Incomplete", abyip: "Missing", cbydp: "Approved", minutes: "Completed", score: 64 },
-  { name: "San Lorenzo", status: "Compliant", abyip: "Approved", cbydp: "Approved", minutes: "Completed", score: 95 },
-  { name: "Balantay", status: "Overdue", abyip: "Missing", cbydp: "Missing", minutes: "Missing", score: 0 },
-  { name: "San Rafael", status: "Compliant", abyip: "Approved", cbydp: "Approved", minutes: "Completed", score: 93 },
-  { name: "San Gabriel", status: "Pending Review", abyip: "Approved", cbydp: "Pending", minutes: "Completed", score: 83 },
-  { name: "Santa Clara", status: "Compliant", abyip: "Approved", cbydp: "Approved", minutes: "Completed", score: 91 },
-  { name: "San Felipe", status: "Compliant", abyip: "Approved", cbydp: "Approved", minutes: "Completed", score: 95 },
-  { name: "San Nicolas", status: "Incomplete", abyip: "Pending", cbydp: "Missing", minutes: "Completed", score: 55 },
-  { name: "Pandan", status: "Compliant", abyip: "Approved", cbydp: "Approved", minutes: "Completed", score: 97 },
-  { name: "Cabanas", status: "Compliant", abyip: "Approved", cbydp: "Approved", minutes: "Completed", score: 96 },
-  { name: "San Simon", status: "Compliant", abyip: "Approved", cbydp: "Approved", minutes: "Completed", score: 92 },
-];
+// 40 Barangays of the Municipality of Laak, Davao de Oro managed dynamically from MUNICIPAL_BARANGAYS_40
 
 const COMPLIANCE_CRITERIA_DEFAULT = [
   { id: "crit-1", name: "Republic Act No. 10742 Standard Compliance", section: "General", rule: "All resolutions must explicitly align with the 10% SK statutory fund cap rules.", isMandatory: true, weight: 30 },
@@ -284,8 +244,53 @@ export function AdminDashboard() {
     }
   };
 
+  // Dynamically compute status for all 40 barangays in the Municipality of Laak, Davao de Oro
+  const barangaysList = MUNICIPAL_BARANGAYS_40.map(bName => {
+    const bgyAccounts = accounts.filter(a => a.barangayName.toLowerCase() === bName.toLowerCase());
+    const approvedAccounts = bgyAccounts.filter(a => a.status === "approved");
+    const pendingAccounts = bgyAccounts.filter(a => a.status === "pending");
+
+    const bgySubs = submissions.filter(s => s.barangayName.toLowerCase() === bName.toLowerCase());
+    const hasApprovedCbydp = bgySubs.some(s => s.docCode === "CBYDP" && s.status === "approved");
+    const hasPendingCbydp = bgySubs.some(s => s.docCode === "CBYDP" && s.status === "pending_review");
+    const hasApprovedAbyip = bgySubs.some(s => s.docCode === "ABYIP" && s.status === "approved");
+    const hasPendingAbyip = bgySubs.some(s => s.docCode === "ABYIP" && s.status === "pending_review");
+
+    let status: "Compliant" | "Pending Review" | "Incomplete" | "Awaiting Registration" = "Awaiting Registration";
+    let score = 0;
+
+    if (approvedAccounts.length > 0) {
+      if (hasApprovedCbydp && hasApprovedAbyip) {
+        status = "Compliant";
+        score = 95;
+      } else if (hasPendingCbydp || hasPendingAbyip) {
+        status = "Pending Review";
+        score = 75;
+      } else {
+        status = "Incomplete";
+        score = 45;
+      }
+    } else if (pendingAccounts.length > 0) {
+      status = "Pending Review";
+      score = 25;
+    } else {
+      status = "Awaiting Registration";
+      score = 0;
+    }
+
+    return {
+      name: bName,
+      status,
+      abyip: (hasApprovedAbyip ? "Approved" : hasPendingAbyip ? "Pending" : "Missing") as "Approved" | "Pending" | "Missing",
+      cbydp: (hasApprovedCbydp ? "Approved" : hasPendingCbydp ? "Pending" : "Missing") as "Approved" | "Pending" | "Missing",
+      minutes: (approvedAccounts.length > 0 ? "Completed" : "Missing") as "Completed" | "Missing",
+      score,
+      accountsCount: bgyAccounts.length
+    };
+  });
+
   // Filtered Barangays
-  const filteredBarangays = BARANGAYS_40.filter(b => {
+  const filteredBarangays = barangaysList.filter(b => {
     const matchesSearch = b.name.toLowerCase().includes(searchBarangay.toLowerCase());
     const matchesStatus = statusFilter === "All" || b.status === statusFilter;
     return matchesSearch && matchesStatus;
@@ -303,11 +308,11 @@ export function AdminDashboard() {
     return sub.status === subDocFilter;
   });
 
-  // Aggregate stats
-  const totalBarangays = BARANGAYS_40.length;
-  const compliantCount = BARANGAYS_40.filter(b => b.status === "Compliant").length;
-  const pendingCount = BARANGAYS_40.filter(b => b.status === "Pending Review").length;
-  const incompleteCount = BARANGAYS_40.filter(b => b.status === "Incomplete" || b.status === "Overdue").length;
+  // Aggregate stats for Municipality of Laak, Davao de Oro
+  const totalBarangays = MUNICIPAL_BARANGAYS_40.length;
+  const compliantCount = barangaysList.filter(b => b.status === "Compliant").length;
+  const pendingCount = barangaysList.filter(b => b.status === "Pending Review").length;
+  const incompleteCount = barangaysList.filter(b => b.status === "Incomplete" || b.status === "Awaiting Registration").length;
 
   const pendingAccountsCount = accounts.filter(a => a.status === "pending").length;
   const pendingSubmissionsCount = submissions.filter(s => s.status === "pending_review").length;
@@ -602,24 +607,40 @@ export function AdminDashboard() {
                     </span>
                   </div>
                   <p className="text-xs text-[#888] font-medium mt-1">
-                    Review and authorize newly registered barangay council accounts. Approved accounts receive login authorization instantly.
+                    Review and authorize newly registered accounts for the 40 barangays of the Municipality of Laak, Davao de Oro.
                   </p>
                 </div>
 
-                <div className="flex items-center gap-1.5 overflow-x-auto">
-                  {(["All", "pending", "approved", "rejected"] as const).map(st => (
-                    <button
-                      key={st}
-                      onClick={() => setAccountFilter(st)}
-                      className={`px-3.5 py-2 text-[10px] font-black uppercase rounded-xl border transition-all ${
-                        accountFilter === st
-                          ? "bg-[#0C1E36] text-white border-[#0C1E36] shadow-xs"
-                          : "bg-zinc-50 text-zinc-500 border-zinc-200 hover:bg-zinc-100"
-                      }`}
-                    >
-                      {st} {st === "pending" && pendingAccountsCount > 0 && `(${pendingAccountsCount})`}
-                    </button>
-                  ))}
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    onClick={() => {
+                      if (window.confirm("Confirm reset: Are you sure you want to reset all barangay registrations? This will purge all registered barangay accounts across the 40 barangays of Laak, leaving only the LYDO Officer active.")) {
+                        resetAllBarangays();
+                        refreshData();
+                      }
+                    }}
+                    className="px-3.5 py-2 text-[10px] font-black uppercase rounded-xl border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100 transition-all flex items-center gap-1.5"
+                    title="Purge all registered barangay accounts while preserving LYDO"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5 text-rose-600" />
+                    Reset All Barangays
+                  </button>
+
+                  <div className="flex items-center gap-1.5 overflow-x-auto">
+                    {(["All", "pending", "approved", "rejected"] as const).map(st => (
+                      <button
+                        key={st}
+                        onClick={() => setAccountFilter(st)}
+                        className={`px-3.5 py-2 text-[10px] font-black uppercase rounded-xl border transition-all ${
+                          accountFilter === st
+                            ? "bg-[#0C1E36] text-white border-[#0C1E36] shadow-xs"
+                            : "bg-zinc-50 text-zinc-500 border-zinc-200 hover:bg-zinc-100"
+                        }`}
+                      >
+                        {st} {st === "pending" && pendingAccountsCount > 0 && `(${pendingAccountsCount})`}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
 

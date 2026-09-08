@@ -1,192 +1,131 @@
 import { BarangayAccount, DocumentArchiveItem, AppNotification, UserRole } from "../types";
 
 export const MUNICIPAL_BARANGAYS_40 = [
-  "Poblacion", "San Jose", "Santa Maria", "San Vicente", "San Pedro", 
-  "Santo Domingo", "Concepcion", "San Juan", "Santa Ana", "San Andres", 
-  "San Mateo", "San Isidro", "Magsaysay", "Quezon", "Rizal", 
-  "Baler", "Maligno", "San Francisco", "San Roque", "Santa Catalina", 
-  "Santa Rosa", "Santiago", "San Agustin", "Santo Tomas", "Lucban", 
-  "San Miguel", "Del Pilar", "Caloocan", "San Antonio", "Malabon", 
-  "San Lorenzo", "Balantay", "San Rafael", "San Gabriel", "Santa Clara", 
-  "San Felipe", "San Nicolas", "Pandan", "Cabanas", "San Simon"
+  "Aguinaldo",
+  "Amorcruz (Amor Cruz)",
+  "Ampawid",
+  "Andap",
+  "Anitap",
+  "Bagong Silang",
+  "Banbanon",
+  "Belmonte",
+  "Binasbas",
+  "Bullucan",
+  "Ceboleda (Cebulida)",
+  "Concepcion",
+  "Datu Ampunan",
+  "Datu Davao",
+  "Doña Josefa",
+  "El Katipunan",
+  "Il Papa",
+  "Imelda",
+  "Inakayan (Inacayan)",
+  "Kaligutan",
+  "Kapatagan",
+  "Kidawa",
+  "Kilagding",
+  "Kiokmay",
+  "Laak / Laac (Poblacion)",
+  "Langtud",
+  "Longanapan",
+  "Mabuhay",
+  "Macopa",
+  "Malinao",
+  "Mangloy",
+  "Melale",
+  "Naga",
+  "New Bethlehem",
+  "Panamoren",
+  "Sabud",
+  "San Antonio",
+  "Santa Emilia (Sta. Emilia)",
+  "Santo Niño (Sto. Niño)",
+  "Sisimon"
 ] as const;
 
 export type MunicipalBarangay = typeof MUNICIPAL_BARANGAYS_40[number];
 
-// Initial seeded accounts for immediate testing
-const INITIAL_ACCOUNTS: BarangayAccount[] = [
-  {
-    id: "acct-poblacion-chair",
-    barangayName: "Poblacion",
-    officerName: "Hon. Juan Dela Cruz",
-    role: "Chairman",
-    email: "chairman@sk.gov.ph",
-    password: "chair123",
-    contactNumber: "0917-555-0101",
-    status: "approved",
-    registeredAt: "2026-01-15T08:30:00Z",
-    approvedAt: "2026-01-15T10:00:00Z",
-    approvedBy: "Municipal LYDO Officer"
-  },
-  {
-    id: "acct-poblacion-sec",
-    barangayName: "Poblacion",
-    officerName: "Maria Santos",
-    role: "Secretary",
-    email: "secretary@sk.gov.ph",
-    password: "sec123",
-    contactNumber: "0918-555-0102",
-    status: "approved",
-    registeredAt: "2026-01-15T09:00:00Z",
-    approvedAt: "2026-01-15T10:15:00Z",
-    approvedBy: "Municipal LYDO Officer"
-  },
-  {
-    id: "acct-poblacion-treas",
-    barangayName: "Poblacion",
-    officerName: "Pedro Penduko",
-    role: "Treasurer",
-    email: "treasurer@sk.gov.ph",
-    password: "treas123",
-    contactNumber: "0919-555-0103",
-    status: "approved",
-    registeredAt: "2026-01-15T09:30:00Z",
-    approvedAt: "2026-01-15T10:30:00Z",
-    approvedBy: "Municipal LYDO Officer"
-  },
-  {
-    id: "acct-sanjose-chair",
-    barangayName: "San Jose",
-    officerName: "Hon. Gabriel Reyes",
-    role: "Chairman",
-    email: "sanjose.chair@sk.gov.ph",
-    password: "sanjose123",
-    contactNumber: "0920-555-0201",
-    status: "pending",
-    registeredAt: "2026-09-07T14:20:00Z"
-  },
-  {
-    id: "acct-santamaria-sec",
-    barangayName: "Santa Maria",
-    officerName: "Clara Garcia",
-    role: "Secretary",
-    email: "santamaria.sec@sk.gov.ph",
-    password: "maria123",
-    contactNumber: "0921-555-0301",
-    status: "pending",
-    registeredAt: "2026-09-08T08:10:00Z"
-  }
-];
+// Initial seeded accounts: Empty so only LYDO officer remains
+const INITIAL_ACCOUNTS: BarangayAccount[] = [];
 
-// Initial seeded archives for Annual Budget, ABYIP, and CBYDP
-const INITIAL_ARCHIVES: DocumentArchiveItem[] = [
-  {
-    id: "arch-cbydp-2023-2026-pob",
-    docType: "CBYDP",
-    barangayName: "Poblacion",
-    yearOrPeriod: "2023-2026",
-    title: "Comprehensive Barangay Youth Development Plan (2023-2026 Cycle)",
-    status: "archived",
-    archivedAt: "2026-01-10T12:00:00Z",
-    approvedBy: "Municipal LYDO Officer & DILG",
-    totalBudget: 1200000,
-    remarks: "Superseded by 2026-2029 3-year rolling plan upon term turnover.",
-    summaryData: {
-      cycles: "3-Year Mandatory",
-      keyPillars: "Education grants, anti-drug sports clinics, ecological solid waste"
-    }
-  },
-  {
-    id: "arch-abyip-2025-pob",
-    docType: "ABYIP",
-    barangayName: "Poblacion",
-    yearOrPeriod: "2025",
-    title: "Annual Barangay Youth Investment Program FY 2025",
-    status: "approved_historical",
-    archivedAt: "2025-12-31T23:59:59Z",
-    approvedBy: "Municipal LYDO Officer",
-    totalBudget: 850000,
-    remarks: "Fully executed and audited. 98% fund utilization rate.",
-    summaryData: {
-      activitiesCount: 14,
-      primaryFocus: "Youth Skills & Livelihood Training"
-    }
-  },
-  {
-    id: "arch-budget-2025-pob",
-    docType: "Annual Budget",
-    barangayName: "Poblacion",
-    yearOrPeriod: "2025",
-    title: "SK Annual Budget FY 2025 (P.S., MOOE & CO Allocation)",
-    status: "approved_historical",
-    archivedAt: "2025-12-31T23:59:59Z",
-    approvedBy: "Sangguniang Bayan & Municipal LYDO",
-    totalBudget: 850000,
-    remarks: "Official COA post-audit passed with zero Notice of Disallowance.",
-    summaryData: {
-      generalAdmin: 210000,
-      ydepPrograms: 640000
-    }
-  },
-  {
-    id: "arch-cbydp-2023-2026-sj",
-    docType: "CBYDP",
-    barangayName: "San Jose",
-    yearOrPeriod: "2023-2026",
-    title: "Comprehensive Barangay Youth Development Plan (2023-2026 Cycle)",
-    status: "archived",
-    archivedAt: "2026-01-08T09:00:00Z",
-    approvedBy: "Municipal LYDO Officer",
-    totalBudget: 980000,
-    remarks: "Archived during midterm alignment review."
-  },
-  {
-    id: "arch-budget-2025-sj",
-    docType: "Annual Budget",
-    barangayName: "San Jose",
-    yearOrPeriod: "2025",
-    title: "SK Annual Budget FY 2025",
-    status: "approved_historical",
-    archivedAt: "2025-12-28T16:00:00Z",
-    approvedBy: "Municipal LYDO Officer",
-    totalBudget: 740000,
-    remarks: "Year-end financial reconciliation approved."
-  }
-];
+// Initial seeded archives: Empty
+const INITIAL_ARCHIVES: DocumentArchiveItem[] = [];
 
 // Initial seeded notifications
 const INITIAL_NOTIFICATIONS: AppNotification[] = [
   {
-    id: "notif-gen-1",
+    id: "notif-laak-initial-1",
     targetType: "broadcast",
     targetBarangay: "All",
-    title: "Mandatory Submission of FY 2027 ABYIP Drafts",
-    message: "Greetings to all 40 Barangay SK Councils. Please be reminded that the draft of the Annual Barangay Youth Investment Program (ABYIP) must be submitted through SKOMPAS on or before the upcoming statutory deadline for LYDO compliance verification.",
+    title: "Official Notice: 40 Barangays of the Municipality of Laak",
+    message: "Greetings to all Sangguniang Kabataan Councils across the 40 barangays of the Municipality of Laak, Davao de Oro. The SKOMPAS municipal registry has been reset. Only the Municipal LYDO Officer is currently active. SK Chairpersons, Secretaries, and Treasurers must register their official barangay accounts through the portal for LYDO accreditation before submitting statutory planning and financial documents.",
     sender: "Municipal LYDO Officer",
     priority: "announcement",
-    createdAt: new Date(Date.now() - 86400000 * 2).toISOString(),
-    readBy: []
-  },
-  {
-    id: "notif-priv-1",
-    targetType: "private",
-    targetBarangay: "San Jose",
-    title: "Action Required: Clarification on CBYDP Health Cluster Budget",
-    message: "Barangay San Jose SK Officials: Please review the Health and Wellness cluster allocation in your CBYDP submission. Additional justification is requested under DILG MC 2019-151 before final stamp approval.",
-    sender: "Municipal LYDO Officer",
-    priority: "urgent",
-    createdAt: new Date(Date.now() - 3600000 * 5).toISOString(),
+    createdAt: new Date().toISOString(),
     readBy: []
   }
 ];
 
-// Keys for local persistence
+// Keys for local persistence (v3 for clean Laak reset)
 const STORAGE_KEYS = {
-  ACCOUNTS: "skompas_barangay_accounts_v2",
-  ARCHIVES: "skompas_document_archives_v2",
-  NOTIFICATIONS: "skompas_notifications_v2",
-  DOC_SUBMISSIONS: "skompas_document_submissions_v2"
+  ACCOUNTS: "skompas_barangay_accounts_laak_v3",
+  ARCHIVES: "skompas_document_archives_laak_v3",
+  NOTIFICATIONS: "skompas_notifications_laak_v3",
+  DOC_SUBMISSIONS: "skompas_document_submissions_laak_v3",
+  RECORDS: "skompas_barangay_records_laak_v3"
 };
+
+// Global reset function ensuring all registered barangays are purged, only LYDO remains
+export function resetAllBarangays(): void {
+  try {
+    localStorage.removeItem("skompas_barangay_accounts_v1");
+    localStorage.removeItem("skompas_barangay_accounts_v2");
+    localStorage.removeItem("skompas_document_archives_v1");
+    localStorage.removeItem("skompas_document_archives_v2");
+    localStorage.removeItem("skompas_document_submissions_v1");
+    localStorage.removeItem("skompas_document_submissions_v2");
+    localStorage.removeItem("skompas_notifications_v1");
+    localStorage.removeItem("skompas_notifications_v2");
+    localStorage.removeItem("skompas_barangay_records");
+
+    localStorage.setItem(STORAGE_KEYS.ACCOUNTS, JSON.stringify([]));
+    localStorage.setItem(STORAGE_KEYS.ARCHIVES, JSON.stringify([]));
+    localStorage.setItem(STORAGE_KEYS.DOC_SUBMISSIONS, JSON.stringify([]));
+    localStorage.setItem(STORAGE_KEYS.RECORDS, JSON.stringify([]));
+    localStorage.setItem(STORAGE_KEYS.NOTIFICATIONS, JSON.stringify(INITIAL_NOTIFICATIONS));
+
+    // If current session is a barangay user (non-Admin), reset session to login
+    const currentRole = localStorage.getItem("sk_mock_role");
+    if (currentRole && currentRole !== "Admin") {
+      localStorage.removeItem("sk_mock_user");
+      localStorage.removeItem("sk_mock_role");
+      localStorage.removeItem("sk_active_barangay");
+    }
+
+    window.dispatchEvent(new Event("skompas_accounts_updated"));
+    window.dispatchEvent(new Event("skompas_submissions_updated"));
+    window.dispatchEvent(new Event("skompas_archives_updated"));
+    window.dispatchEvent(new Event("skompas_notifications_updated"));
+    window.dispatchEvent(new Event("skompas_records_updated"));
+  } catch (e) {
+    console.error("Error resetting barangay data:", e);
+  }
+}
+
+// Auto-run legacy cleanup once on load if older storage keys are found
+if (typeof window !== "undefined") {
+  try {
+    if (
+      localStorage.getItem("skompas_barangay_accounts_v2") || 
+      localStorage.getItem("skompas_barangay_accounts_v1") ||
+      !localStorage.getItem(STORAGE_KEYS.ACCOUNTS)
+    ) {
+      resetAllBarangays();
+    }
+  } catch (e) {
+    // Ignore storage access errors
+  }
+}
 
 // --- Accounts Management ---
 export function getBarangayAccounts(): BarangayAccount[] {
@@ -196,7 +135,14 @@ export function getBarangayAccounts(): BarangayAccount[] {
       localStorage.setItem(STORAGE_KEYS.ACCOUNTS, JSON.stringify(INITIAL_ACCOUNTS));
       return INITIAL_ACCOUNTS;
     }
-    return JSON.parse(raw);
+    const accounts: BarangayAccount[] = JSON.parse(raw);
+    const validBarangays = new Set<string>(MUNICIPAL_BARANGAYS_40);
+    const filtered = accounts.filter(a => validBarangays.has(a.barangayName));
+    if (filtered.length !== accounts.length) {
+      localStorage.setItem(STORAGE_KEYS.ACCOUNTS, JSON.stringify(filtered));
+      return filtered;
+    }
+    return accounts;
   } catch (e) {
     console.error("Error reading barangay accounts", e);
     return INITIAL_ACCOUNTS;
@@ -491,67 +437,7 @@ export interface DocumentSubmission {
 
 export type DocumentSubmissionItem = DocumentSubmission;
 
-const INITIAL_SUBMISSIONS: DocumentSubmission[] = [
-  {
-    id: "sub-1",
-    barangayName: "Poblacion",
-    docCode: "CBYDP",
-    docType: "CBYDP",
-    title: "Comprehensive Barangay Youth Development Plan (2026-2029)",
-    yearOrPeriod: "2026-2029",
-    submittedBy: "Maria Santos (SK Secretary)",
-    officerRole: "Secretary",
-    submittedAt: "2026-05-10T11:00:00Z",
-    status: "approved",
-    reviewedAt: "2026-05-12T14:30:00Z",
-    reviewedBy: "Municipal LYDO Officer",
-    reviewNotes: "Aligned with municipal youth development priority pillars.",
-    totalBudget: 400000
-  },
-  {
-    id: "sub-2",
-    barangayName: "Poblacion",
-    docCode: "ABYIP",
-    docType: "ABYIP",
-    title: "Annual Barangay Youth Investment Program FY 2026",
-    yearOrPeriod: "2026",
-    submittedBy: "Maria Santos & Pedro Penduko",
-    officerRole: "Secretary",
-    submittedAt: "2026-05-12T15:00:00Z",
-    status: "approved",
-    reviewedAt: "2026-05-13T09:00:00Z",
-    reviewedBy: "Municipal LYDO Officer",
-    reviewNotes: "Formally endorsed to Sangguniang Bayan.",
-    totalBudget: 400000
-  },
-  {
-    id: "sub-3",
-    barangayName: "San Jose",
-    docCode: "ANNUAL-BUDGET",
-    docType: "Annual Budget",
-    title: "SK Annual Budget FY 2026",
-    yearOrPeriod: "2026",
-    submittedBy: "Hon. Gabriel Reyes (Chairman)",
-    officerRole: "Chairman",
-    submittedAt: "2026-09-07T16:00:00Z",
-    status: "pending_review",
-    totalBudget: 954653.30,
-    reviewNotes: "Awaiting final verification of MOOE budget ceiling."
-  },
-  {
-    id: "sub-4",
-    barangayName: "Santa Maria",
-    docCode: "ABYIP",
-    docType: "ABYIP",
-    title: "Annual Barangay Youth Investment Program FY 2026",
-    yearOrPeriod: "2026",
-    submittedBy: "Clara Garcia (Secretary)",
-    officerRole: "Secretary",
-    submittedAt: "2026-09-08T09:15:00Z",
-    status: "pending_review",
-    totalBudget: 620000
-  }
-];
+const INITIAL_SUBMISSIONS: DocumentSubmission[] = [];
 
 export function getDocumentSubmissions(barangayName?: string): DocumentSubmission[] {
   try {
@@ -615,33 +501,10 @@ export interface BarangayRecord {
 
 export function getBarangayRecords(barangayName?: string): BarangayRecord[] {
   try {
-    const raw = localStorage.getItem("skompas_barangay_records");
+    const raw = localStorage.getItem(STORAGE_KEYS.RECORDS);
     let all: BarangayRecord[] = raw ? JSON.parse(raw) : [];
     if (!raw) {
-      // Seed default approved records for demo barangays
-      all = [
-        {
-          id: "rec-pob-1",
-          barangayName: "Poblacion",
-          docType: "CBYDP",
-          title: "Comprehensive Barangay Youth Development Plan (2026-2029)",
-          yearOrPeriod: "2026-2029",
-          approvedAt: "2026-05-12T14:30:00Z",
-          approvedBy: "Municipal LYDO Officer",
-          totalBudget: 400000
-        },
-        {
-          id: "rec-pob-2",
-          barangayName: "Poblacion",
-          docType: "ABYIP",
-          title: "Annual Barangay Youth Investment Program FY 2026",
-          yearOrPeriod: "2026",
-          approvedAt: "2026-05-13T09:00:00Z",
-          approvedBy: "Municipal LYDO Officer",
-          totalBudget: 400000
-        }
-      ];
-      localStorage.setItem("skompas_barangay_records", JSON.stringify(all));
+      localStorage.setItem(STORAGE_KEYS.RECORDS, JSON.stringify([]));
     }
     if (barangayName && barangayName !== "All" && barangayName !== "Admin") {
       return all.filter(r => r.barangayName.toLowerCase() === barangayName.toLowerCase());
@@ -656,7 +519,7 @@ export function saveBarangayRecord(record: BarangayRecord) {
   try {
     const existing = getBarangayRecords();
     const updated = [record, ...existing.filter(r => r.id !== record.id)];
-    localStorage.setItem("skompas_barangay_records", JSON.stringify(updated));
+    localStorage.setItem(STORAGE_KEYS.RECORDS, JSON.stringify(updated));
     window.dispatchEvent(new Event("skompas_records_updated"));
   } catch (e) {
     console.error("Error saving barangay record", e);

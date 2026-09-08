@@ -543,13 +543,13 @@ Sangguniang Kabataan Chairman & Council
             <div className="space-y-1">
               <h3 className="text-sm font-black text-[#0C1E36]">3-Year CBYDP Template</h3>
               <p className="text-[10px] text-zinc-500 font-medium leading-relaxed">
-                Comprehensive Barangay Youth Development Plan (CY 2026-2029). Establishes 3-year strategic priorities and program benchmarks.
+                Comprehensive Barangay Youth Development Plan (CY 2026-2028). Standardized 10 Centers of Participation with landscape print and export.
               </p>
             </div>
           </div>
 
-          <button
-            onClick={() => setIsCbydpModalOpen(true)}
+          <Link
+            to="/cbydp-template"
             className={`w-full py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
               cbydpStatus === "submitted"
                 ? "bg-emerald-600 hover:bg-emerald-700 text-white shadow-md"
@@ -557,8 +557,8 @@ Sangguniang Kabataan Chairman & Council
             }`}
           >
             <FileText className="w-3.5 h-3.5" />
-            {cbydpStatus === "submitted" ? "View Submitted CBYDP" : "View & Complete CBYDP"}
-          </button>
+            {cbydpStatus === "submitted" ? "View Submitted CBYDP" : "Open CBYDP Template"}
+          </Link>
         </div>
 
         {/* Step 2: ABYIP */}
@@ -725,12 +725,21 @@ Sangguniang Kabataan Chairman & Council
               {/* Modal Scroll Content */}
               <div className="flex-1 overflow-y-auto p-8 space-y-8">
                 
-                {/* Intro Box */}
-                <div className="p-4.5 bg-[#FDFCFB] border border-zinc-100 rounded-2xl text-[10px] text-zinc-600 font-medium leading-relaxed flex gap-3">
-                  <Info className="w-5 h-5 text-[#C89311] shrink-0" />
-                  <p>
-                    The <strong>Comprehensive Barangay Youth Development Plan (CBYDP)</strong> is a 3-year plan formulated by the Sangguniang Kabataan (SK) within three months of assumption. It aligns with the Philippine Youth Development Plan (PYDP). Complete the focus areas below to initiate the audit.
-                  </p>
+                {/* Intro Box & Direct Standard Template Link */}
+                <div className="p-4.5 bg-amber-50/70 border border-amber-200/80 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                  <div className="flex gap-3 text-[10px] text-amber-950 font-medium leading-relaxed">
+                    <Info className="w-5 h-5 text-amber-700 shrink-0" />
+                    <div>
+                      The <strong>Comprehensive Barangay Youth Development Plan (CBYDP)</strong> establishes the 3-year strategic blueprint across the <strong>10 Centers of Participation</strong> (Governance, Active Citizenship, Economic Empowerment, Global Mobility, Environment, Agriculture, Peace & Security, Social Inclusion, Health, Education).
+                    </div>
+                  </div>
+                  <Link
+                    to="/cbydp-template"
+                    className="shrink-0 px-4 py-2 rounded-xl bg-blue-950 hover:bg-blue-900 text-white text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 shadow-sm"
+                  >
+                    <FileText className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Open Standard PDF Template</span>
+                  </Link>
                 </div>
 
                 {/* Main Grid: Form Inputs Left, Explainable AI Audit Right */}

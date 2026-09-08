@@ -32,18 +32,21 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// Mock Users for Prototype default logins
+// Mock Users for Prototype default logins: Only LYDO remains active
 const MOCK_USERS: Record<string, User> = {
-  Chairman: { uid: 'chair-1', email: 'chairman@sk.gov.ph', displayName: 'Hon. Juan Dela Cruz', barangayName: 'Poblacion', status: 'approved' },
-  Secretary: { uid: 'sec-1', email: 'secretary@sk.gov.ph', displayName: 'Maria Santos', barangayName: 'Poblacion', status: 'approved' },
-  Treasurer: { uid: 'trea-1', email: 'treasurer@sk.gov.ph', displayName: 'Pedro Penduko', barangayName: 'Poblacion', status: 'approved' },
-  Admin: { uid: 'admin-1', email: 'dilg@dilg.gov.ph', displayName: 'Dir. Sarah Geronimo', barangayName: 'All', status: 'approved' },
+  Admin: { 
+    uid: 'admin-1', 
+    email: 'dilg@dilg.gov.ph', 
+    displayName: 'Municipal LYDO Officer', 
+    barangayName: 'All', 
+    status: 'approved' 
+  },
 };
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [role, setRole] = useState<UserRole>(null);
-  const [activeBarangay, setActiveBarangay] = useState<string>("Poblacion");
+  const [activeBarangay, setActiveBarangay] = useState<string>("Laak / Laac (Poblacion)");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -54,6 +57,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     
     if (savedUser && savedRole) {
       const parsedUser = JSON.parse(savedUser);
+      // If the saved user is a non-admin whose barangay is not registered, logout
+      if (savedRole !== "Admin") {
+        const accounts = getBarangayAccounts();
+        const accountValid = accounts.some(a => a.id === parsedUser.uid && a.status === "approved");
+        if (!accountValid) {
+          localStorage.removeItem('sk_mock_user');
+          localStorage.removeItem('sk_mock_role');
+          localStorage.removeItem('sk_active_barangay');
+          setUser(null);
+          setRole(null);
+          setLoading(false);
+          return;
+        }
+      }
+
       setUser(parsedUser);
       setRole(savedRole as UserRole);
       if (parsedUser.barangayName) {
@@ -67,16 +85,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signIn = async (paramsOrRole?: UserRole | SignInParams) => {
     // Determine if argument is string role or object
-    let targetRole: UserRole = "Chairman";
+    let targetRole: UserRole = "Admin";
     let targetEmail: string | undefined = undefined;
     let targetPassword: string | undefined = undefined;
     let targetBarangay: string | undefined = undefined;
     let targetDisplayName: string | undefined = undefined;
 
     if (typeof paramsOrRole === "string" || !paramsOrRole) {
-      targetRole = (paramsOrRole as UserRole) || "Chairman";
+      targetRole = (paramsOrRole as UserRole) || "Admin";
     } else {
-      targetRole = paramsOrRole.role || "Chairman";
+      targetRole = paramsOrRole.role || "Admin";
       targetEmail = paramsOrRole.email;
       targetPassword = paramsOrRole.password;
       targetBarangay = paramsOrRole.barangayName;
@@ -117,23 +135,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         localStorage.setItem('sk_mock_role', matched.role);
         localStorage.setItem('sk_active_barangay', matched.barangayName);
         return;
+      } else {
+        throw new Error(`No approved account found for ${targetEmail}. All barangay accounts have been reset. Please register your account for your barangay in Laak, Davao de Oro.`);
       }
     }
 
-    // Fallback to default role mock users
-    const mockUser = MOCK_USERS[targetRole as keyof typeof MOCK_USERS] || MOCK_USERS.Chairman;
-    const finalUser: User = {
-      ...mockUser,
-      barangayName: targetBarangay || mockUser.barangayName || "Poblacion",
-      displayName: targetDisplayName || mockUser.displayName
-    };
+    // Admin (LYDO) Login
+    if (targetRole === "Admin") {
+      const adminUser: User = {
+        uid: 'admin-1',
+        email: targetEmail || 'dilg@dilg.gov.ph',
+        displayName: 'Municipal LYDO Officer',
+        barangayName: 'All',
+        status: 'approved'
+      };
+      setUser(adminUser);
+      setRole("Admin");
+      setActiveBarangay("All");
+      localStorage.setItem('sk_mock_user', JSON.stringify(adminUser));
+      localStorage.setItem('sk_mock_role', 'Admin');
+      localStorage.setItem('sk_active_barangay', 'All');
+      return;
+    }
 
-    setUser(finalUser);
-    setRole(targetRole);
-    setActiveBarangay(finalUser.barangayName || "Poblacion");
-    localStorage.setItem('sk_mock_user', JSON.stringify(finalUser));
-    localStorage.setItem('sk_mock_role', targetRole);
-    localStorage.setItem('sk_active_barangay', finalUser.barangayName || "Poblacion");
+    // Non-admin without matched account cannot log in
+    throw new Error("All barangay accounts have been reset. Only the Municipal LYDO Officer is currently active. Please use the Register Account tab to submit your barangay credentials.");
   };
 
   const logout = async () => {

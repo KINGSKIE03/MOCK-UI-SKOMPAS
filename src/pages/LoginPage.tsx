@@ -24,6 +24,19 @@ interface RoleConfig {
 
 const ROLES: RoleConfig[] = [
   {
+    id: "Admin",
+    title: "LYDO Officer",
+    subtitle: "Municipal Youth Development Office - Admin Oversight (Laak, Davao de Oro)",
+    icon: Landmark,
+    color: "bg-[#5B21B6]",
+    bg: "bg-[#5B21B6]/5",
+    border: "border-[#5B21B6]/20",
+    text: "text-[#5B21B6]",
+    accent: "text-white",
+    defaultPass: "dilg123",
+    defaultEmail: "dilg@dilg.gov.ph"
+  },
+  {
     id: "Chairman",
     title: "SK Chairman",
     subtitle: "Executive Approval Routing & Metrics",
@@ -61,19 +74,6 @@ const ROLES: RoleConfig[] = [
     accent: "text-white",
     defaultPass: "treas123",
     defaultEmail: "treasurer@sk.gov.ph"
-  },
-  {
-    id: "Admin",
-    title: "LYDO Officer",
-    subtitle: "Municipal Youth Development Office - Barangay Approvals & Oversight",
-    icon: Landmark,
-    color: "bg-[#5B21B6]",
-    bg: "bg-[#5B21B6]/5",
-    border: "border-[#5B21B6]/20",
-    text: "text-[#5B21B6]",
-    accent: "text-white",
-    defaultPass: "dilg123",
-    defaultEmail: "dilg@dilg.gov.ph"
   }
 ];
 
@@ -85,10 +85,10 @@ export function LoginPage() {
   // Mode: Sign In vs Sign Up
   const [authMode, setAuthMode] = useState<"signin" | "signup">("signin");
 
-  // Pick initial role from search query or default to Chairman
+  // Pick initial role from search query or default to Admin (LYDO)
   const queryParams = new URLSearchParams(location.search);
   const initialRoleParam = queryParams.get("role") as RoleId;
-  const validInitialRole = ROLES.some((r) => r.id === initialRoleParam) ? initialRoleParam : "Chairman";
+  const validInitialRole = ROLES.some((r) => r.id === initialRoleParam) ? initialRoleParam : "Admin";
 
   const [selectedRole, setSelectedRole] = useState<RoleId>(validInitialRole);
   const [email, setEmail] = useState("");
@@ -181,21 +181,28 @@ export function LoginPage() {
         return;
       }
 
-      // If not in registered accounts, check default role mock credentials
-      const emailMatches = trimmedEmail === activeConfig.defaultEmail.toLowerCase();
-      const passMatches = password === activeConfig.defaultPass;
+      // If logging in as LYDO (Admin)
+      if (selectedRole === "Admin") {
+        const emailMatches = trimmedEmail === activeConfig.defaultEmail.toLowerCase();
+        const passMatches = password === activeConfig.defaultPass;
 
-      if (!emailMatches || !passMatches) {
-        setError(`Invalid credentials for ${activeConfig.title}. If you recently registered, please ensure your account was approved by LYDO, or use the "Auto-Fill" button for prototype demo.`);
-        setIsSubmitting(false);
+        if (!emailMatches || !passMatches) {
+          setError(`Invalid credentials for ${activeConfig.title}. Default prototype credentials are ${activeConfig.defaultEmail} / ${activeConfig.defaultPass}.`);
+          setIsSubmitting(false);
+          return;
+        }
+
+        setSuccess("Verified! Accessing municipal LYDO workspace...");
+        await signIn("Admin");
+        setTimeout(() => {
+          navigate("/dashboard");
+        }, 1000);
         return;
       }
 
-      setSuccess("Verified! Accessing municipal workspace...");
-      await signIn(selectedRole);
-      setTimeout(() => {
-        navigate("/dashboard");
-      }, 1000);
+      // For non-admin roles (Chairman, Secretary, Treasurer)
+      setError(`No approved account found for ${trimmedEmail}. All previous barangay accounts have been reset. Only the LYDO Officer is currently active. Please click "Sign Up (Barangay)" to register your official credentials for your barangay in Laak, Davao de Oro.`);
+      setIsSubmitting(false);
     } catch (err: any) {
       setError(err.message || "An authentication error occurred.");
       setIsSubmitting(false);
@@ -522,9 +529,25 @@ export function LoginPage() {
 
               <form onSubmit={handleSignUpSubmit} className="space-y-4">
                 <div>
-                  <label className="text-[9px] font-black text-zinc-400 uppercase tracking-widest block mb-1.5">
-                    Select Barangay (Max 40)
-                  </label>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-[9px] font-black text-zinc-400 uppercase tracking-widest block">
+                      Select Barangay (40 Barangays of Laak, Davao de Oro)
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSignupBarangay(MUNICIPAL_BARANGAYS_40[0]);
+                        setSignupRole("Chairman");
+                        setSignupName("Hon. Gabriel Santos");
+                        setSignupEmail("chairman.aguinaldo@sk.gov.ph");
+                        setSignupPassword("aguinaldo2026");
+                        setSignupContact("0917-555-0101");
+                      }}
+                      className="text-[9px] font-black text-[#C89311] hover:underline uppercase tracking-wider"
+                    >
+                      Fill Sample Official
+                    </button>
+                  </div>
                   <div className="relative">
                     <select
                       value={signupBarangay}

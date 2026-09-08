@@ -8,6 +8,7 @@ import { LandingPage } from "@/src/pages/LandingPage";
 import { Dashboard } from "@/src/pages/Dashboard";
 import { EditorPage } from "@/src/pages/EditorPage";
 import { BudgetTemplatePage } from "@/src/pages/BudgetTemplatePage";
+import { CbydpTemplatePage } from "@/src/pages/CbydpTemplatePage";
 import { LoginPage } from "@/src/pages/LoginPage";
 import { AdminDashboard } from "@/src/pages/AdminDashboard";
 import { Navbar } from "@/src/components/layout/Navbar";
@@ -47,6 +48,10 @@ function AppRoutes() {
         <Route 
           path="/budget-template" 
           element={user && role ? <BudgetTemplatePage /> : <Navigate to="/login" />} 
+        />
+        <Route 
+          path="/cbydp-template" 
+          element={user && role ? <CbydpTemplatePage /> : <Navigate to="/login" />} 
         />
       </Routes>
     </div>

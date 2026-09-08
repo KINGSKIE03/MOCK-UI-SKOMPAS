@@ -84,3 +84,46 @@ export interface ComplianceReport {
   };
 }
 
+export interface CbydpRowItem {
+  id: string;
+  concern: string; // Youth Development Concern
+  objectives: string; // Objectives
+  performanceIndicator: string; // Performance Indicator
+  targetYear1: string; // e.g. "12" or "250" or "10% increase"
+  targetYear2: string;
+  targetYear3: string;
+  targetYear4?: string; // Optional 4th target
+  ppas: string; // Programs, Projects and Activities (PPA'S)
+  budgetCategory: string; // "MOOE" | "CO" | "PS"
+  budgetAmount: number;
+  personResponsible: string;
+}
+
+export interface CbydpCenterSection {
+  id: string;
+  centerName: string; // e.g. "GOVERNANCE", "ACTIVE CITIZENSHIP"
+  agendaStatement: string;
+  items: CbydpRowItem[];
+}
+
+export interface CbydpDocument {
+  id: string;
+  barangayName: string;
+  municipality: string;
+  province: string;
+  calendarYears: string; // e.g. "2026-2028"
+  targetYearLabels: [string, string, string, string?]; // ["2026", "2027", "2028"]
+  preparedByName: string;
+  preparedByTitle: string;
+  approvedByName: string;
+  approvedByTitle: string;
+  attestedByName?: string;
+  attestedByTitle?: string;
+  sections: CbydpCenterSection[];
+  totalAppropriation: number;
+  updatedAt?: string;
+  createdAt?: string;
+  status: "Draft" | "Pending Review" | "Approved";
+}
+
+
