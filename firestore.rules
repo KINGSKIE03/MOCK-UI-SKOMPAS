@@ -1,0 +1,130 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 0. Default Deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Helpers ---
+    function isSignedIn() { return request.auth != null; }
+    function isValidId(id) { return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); }
+    function getUserDoc() { return get(/databases/$(database)/documents/users/$(request.auth.uid)); }
+    function hasUserDoc() { return isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid)); }
+    function getUserData() { return getUserDoc().data; }
+    function getUserRole() { return hasUserDoc() ? getUserData().role : ''; }
+    function getUserBarangay() { return hasUserDoc() && 'barangayName' in getUserData() ? getUserData().barangayName : ''; }
+    function isLYDO() { return isSignedIn() && getUserRole() == 'Admin'; }
+
+    function isCouncilMember(bName) {
+      return isSignedIn() && getUserBarangay() == bName && getUserRole() in ['Chairman', 'Secretary', 'Treasurer'];
+    }
+
+    function canAccessBarangay(bName) {
+      return isLYDO() || isCouncilMember(bName);
+    }
+
+    // --- Validation Blueprints ---
+    function isValidUser(data) {
+      return data.uid == request.auth.uid
+        && data.email == request.auth.token.email
+        && data.role in ['Admin', 'Chairman', 'Secretary', 'Treasurer']
+        && data.name is string && data.name.size() <= 100;
+    }
+
+    // --- Collection: Users ---
+    match /users/{userId} {
+      allow get: if isSignedIn() && (userId == request.auth.uid || isLYDO());
+      allow list: if isSignedIn() && isLYDO();
+      allow create: if isSignedIn() && userId == request.auth.uid && isValidUser(request.resource.data);
+      allow update: if isSignedIn() && (
+        // LYDO approving or rejecting registrations
+        isLYDO()
+        // Or user updating their own profile
+        || (userId == request.auth.uid && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'updatedAt', 'phone']))
+      );
+    }
+
+    // --- Collection: Documents ---
+    match /documents/{docId} {
+      function canReadDoc(data) {
+        return isLYDO() || (
+          isSignedIn() && (
+            !('barangayName' in data) || data.barangayName == getUserBarangay()
+          )
+        );
+      }
+
+      allow list: if isSignedIn();
+      allow get: if isSignedIn() && canReadDoc(resource.data);
+
+      allow create: if isSignedIn() && (
+        isLYDO() || (
+          getUserRole() in ['Chairman', 'Secretary', 'Treasurer']
+          && (!('barangayName' in request.resource.data) || request.resource.data.barangayName == getUserBarangay())
+        )
+      );
+
+      allow update: if isSignedIn() && (
+        isLYDO() 
+        || (resource.data.authorId == request.auth.uid && resource.data.status == 'pending')
+        || (getUserRole() == 'Chairman' && request.resource.data.barangayName == getUserBarangay())
+      );
+
+      allow delete: if isSignedIn() && (isLYDO() || (resource.data.authorId == request.auth.uid && resource.data.status == 'pending'));
+    }
+
+    // --- Collection: Document Submissions (to LYDO) ---
+    match /barangay_submissions/{subId} {
+      allow list, get: if isSignedIn() && (
+        isLYDO() || resource.data.barangayName == getUserBarangay()
+      );
+      allow create: if isSignedIn() && (
+        isLYDO() || request.resource.data.barangayName == getUserBarangay()
+      );
+      allow update: if isSignedIn() && (
+        // LYDO can review, approve, or reject
+        isLYDO()
+        // Submitter can revise while pending
+        || (resource.data.barangayName == getUserBarangay() && resource.data.status == 'pending')
+      );
+      allow delete: if isLYDO();
+    }
+
+    // --- Collection: Barangay Official Records (Approved Documents) ---
+    match /barangay_records/{recordId} {
+      allow list, get: if isSignedIn() && (
+        isLYDO() || resource.data.barangayName == getUserBarangay()
+      );
+      allow create, update: if isSignedIn() && (
+        isLYDO() || request.resource.data.barangayName == getUserBarangay()
+      );
+      allow delete: if isLYDO();
+    }
+
+    // --- Collection: Barangay Archives (Prior Cycles: CBYDP, ABYIP, Budget) ---
+    match /barangay_archives/{archiveId} {
+      allow list, get: if isSignedIn() && (
+        isLYDO() || resource.data.barangayName == getUserBarangay()
+      );
+      allow create: if isSignedIn() && (
+        isLYDO() || request.resource.data.barangayName == getUserBarangay()
+      );
+      allow update, delete: if isLYDO();
+    }
+
+    // --- Collection: Notifications ---
+    match /notifications/{notifId} {
+      allow list, get: if isSignedIn() && (
+        isLYDO() 
+        || resource.data.targetBarangay == 'all'
+        || resource.data.targetBarangay == getUserBarangay()
+      );
+      allow create: if isLYDO();
+      allow update: if isSignedIn() && (
+        isLYDO() || request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read'])
+      );
+      allow delete: if isLYDO();
+    }
+  }
+}

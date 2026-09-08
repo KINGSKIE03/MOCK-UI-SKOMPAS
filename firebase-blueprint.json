@@ -1,0 +1,135 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Represents an SK official or LYDO Officer in the system.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Firebase Auth UID" },
+        "email": { "type": "string", "format": "email" },
+        "name": { "type": "string" },
+        "role": { "type": "string", "enum": ["Admin", "Chairman", "Secretary", "Treasurer"] },
+        "barangayName": { "type": "string", "description": "Designated barangay for SK official" },
+        "status": { "type": "string", "enum": ["pending", "approved", "rejected"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "role"]
+    },
+    "Document": {
+      "title": "SK Document",
+      "description": "A document created for compliance (needs or budget).",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "type": { "type": "string", "enum": ["needs", "budget"] },
+        "title": { "type": "string" },
+        "content": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "approved", "rejected"] },
+        "barangayName": { "type": "string" },
+        "authorId": { "type": "string" },
+        "authorRole": { "type": "string" },
+        "approvedBy": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "budgetAmount": { "type": "number" },
+        "aiFeedback": { "type": "string", "description": "Compliance feedback from AI" }
+      },
+      "required": ["type", "title", "content", "status", "authorId"]
+    },
+    "DocumentSubmission": {
+      "title": "Document Submission",
+      "description": "Statutory submission sent to LYDO for statutory approval.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "barangayName": { "type": "string" },
+        "docCode": { "type": "string" },
+        "docType": { "type": "string", "enum": ["Annual Budget", "ABYIP", "CBYDP"] },
+        "title": { "type": "string" },
+        "yearOrPeriod": { "type": "string" },
+        "submittedAt": { "type": "string", "format": "date-time" },
+        "submittedBy": { "type": "string" },
+        "officerRole": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "approved", "rejected"] },
+        "totalBudget": { "type": "number" },
+        "reviewNotes": { "type": "string" }
+      },
+      "required": ["barangayName", "docType", "yearOrPeriod", "status"]
+    },
+    "BarangayRecord": {
+      "title": "Barangay Official Record",
+      "description": "Approved documents securely preserved in the barangay statutory records.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "barangayName": { "type": "string" },
+        "docType": { "type": "string", "enum": ["Annual Budget", "ABYIP", "CBYDP"] },
+        "yearOrPeriod": { "type": "string" },
+        "title": { "type": "string" },
+        "totalBudget": { "type": "number" },
+        "approvedAt": { "type": "string", "format": "date-time" },
+        "approvedBy": { "type": "string" }
+      },
+      "required": ["barangayName", "docType", "yearOrPeriod"]
+    },
+    "ArchiveDocument": {
+      "title": "Archive Document",
+      "description": "Historical approved documents archived upon creation of new document/year.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "barangayName": { "type": "string" },
+        "docType": { "type": "string", "enum": ["Annual Budget", "ABYIP", "CBYDP"] },
+        "yearOrPeriod": { "type": "string" },
+        "title": { "type": "string" },
+        "archivedAt": { "type": "string", "format": "date-time" },
+        "approvedAt": { "type": "string", "format": "date-time" },
+        "totalBudget": { "type": "number" },
+        "remarks": { "type": "string" }
+      },
+      "required": ["barangayName", "docType", "yearOrPeriod", "archivedAt"]
+    },
+    "Notification": {
+      "title": "Notification",
+      "description": "Notification from LYDO to specific or all barangays.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "targetBarangay": { "type": "string", "description": "Barangay name or 'all'" },
+        "type": { "type": "string", "enum": ["private", "general"] },
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "sender": { "type": "string" },
+        "read": { "type": "boolean" }
+      },
+      "required": ["targetBarangay", "type", "title", "message"]
+    }
+  },
+  "firestore": {
+    "users/{userId}": {
+      "schema": "User",
+      "description": "User profiles and roles."
+    },
+    "documents/{docId}": {
+      "schema": "Document",
+      "description": "Needs and budget documents."
+    },
+    "barangay_submissions/{subId}": {
+      "schema": "DocumentSubmission",
+      "description": "Submissions for LYDO review and statutory sign-off."
+    },
+    "barangay_records/{recordId}": {
+      "schema": "BarangayRecord",
+      "description": "Official approved records saved in barangay archives."
+    },
+    "barangay_archives/{archiveId}": {
+      "schema": "ArchiveDocument",
+      "description": "Historical archived documents for each barangay."
+    },
+    "notifications/{notifId}": {
+      "schema": "Notification",
+      "description": "Broadcast and targeted alerts sent by LYDO."
+    }
+  }
+}
