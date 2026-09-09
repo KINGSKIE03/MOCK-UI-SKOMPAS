@@ -82,13 +82,17 @@ export function LoginPage() {
   const location = useLocation();
   const navigate = useNavigate();
 
-  // Mode: Sign In vs Sign Up
-  const [authMode, setAuthMode] = useState<"signin" | "signup">("signin");
-
-  // Pick initial role from search query or default to Admin (LYDO)
+  // Pick initial role & mode from search query
   const queryParams = new URLSearchParams(location.search);
+  const initialModeParam = queryParams.get("mode");
+  const initialBarangayParam = queryParams.get("barangay");
   const initialRoleParam = queryParams.get("role") as RoleId;
   const validInitialRole = ROLES.some((r) => r.id === initialRoleParam) ? initialRoleParam : "Admin";
+
+  // Mode: Sign In vs Sign Up
+  const [authMode, setAuthMode] = useState<"signin" | "signup">(
+    initialModeParam === "signup" ? "signup" : "signin"
+  );
 
   const [selectedRole, setSelectedRole] = useState<RoleId>(validInitialRole);
   const [email, setEmail] = useState("");
@@ -99,7 +103,11 @@ export function LoginPage() {
   const [success, setSuccess] = useState<string | null>(null);
 
   // Sign up specific fields
-  const [signupBarangay, setSignupBarangay] = useState<string>(MUNICIPAL_BARANGAYS_40[0]);
+  const [signupBarangay, setSignupBarangay] = useState<string>(
+    initialBarangayParam && MUNICIPAL_BARANGAYS_40.includes(initialBarangayParam as any)
+      ? initialBarangayParam
+      : MUNICIPAL_BARANGAYS_40[0]
+  );
   const [signupRole, setSignupRole] = useState<"Chairman" | "Secretary" | "Treasurer">("Chairman");
   const [signupName, setSignupName] = useState("");
   const [signupEmail, setSignupEmail] = useState("");
@@ -258,10 +266,65 @@ export function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#FDFCFB] flex flex-col md:flex-row relative overflow-hidden font-sans">
-      {/* Dynamic Background Glowing Accents */}
-      <div className={`absolute top-0 right-0 w-[50vw] h-[50vw] ${activeConfig.bg} blur-[120px] rounded-full -translate-y-1/2 translate-x-1/4 transition-colors duration-1000`} />
-      <div className="absolute bottom-0 left-0 w-[40vw] h-[40vw] bg-neutral-100 blur-[100px] rounded-full translate-y-1/4 -translate-x-1/4" />
+    <div className="min-h-screen bg-[#FAF9F5] flex flex-col md:flex-row relative overflow-hidden font-sans selection:bg-[#C89311]/20">
+      {/* Dynamic Animated Looping Logo Background */}
+      <div className="fixed inset-0 pointer-events-none overflow-hidden z-0 select-none">
+        {/* Architectural Grid Pattern */}
+        <div 
+          className="absolute inset-0 opacity-[0.03]"
+          style={{
+            backgroundImage: `radial-gradient(#0C1E36 1px, transparent 1px), linear-gradient(to right, #0C1E36 1px, transparent 1px), linear-gradient(to bottom, #0C1E36 1px, transparent 1px)`,
+            backgroundSize: `32px 32px, 96px 96px, 96px 96px`,
+          }}
+        />
+
+        {/* Ambient Glow Colors */}
+        <div className={`absolute top-0 right-0 w-[50vw] h-[50vw] ${activeConfig.bg} blur-[120px] rounded-full -translate-y-1/2 translate-x-1/4 transition-colors duration-1000 opacity-60`} />
+        <div className="absolute bottom-0 left-0 w-[40vw] h-[40vw] bg-amber-400/5 blur-[100px] rounded-full translate-y-1/4 -translate-x-1/4" />
+
+        {/* Massive Looping Background Logo Watermark */}
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] md:w-[800px] md:h-[800px] flex items-center justify-center opacity-[0.04]">
+          <motion.div
+            animate={{ rotate: 360 }}
+            transition={{ duration: 150, repeat: Infinity, ease: "linear" }}
+            className="absolute inset-0 rounded-full border border-dashed border-[#0C1E36]"
+          />
+          <motion.div
+            animate={{ rotate: -360 }}
+            transition={{ duration: 100, repeat: Infinity, ease: "linear" }}
+            className="absolute inset-12 rounded-full border border-[#C89311]"
+          />
+          <motion.div
+            animate={{ 
+              rotate: [0, 360],
+              scale: [0.97, 1.03, 0.97]
+            }}
+            transition={{
+              rotate: { duration: 90, repeat: Infinity, ease: "linear" },
+              scale: { duration: 12, repeat: Infinity, ease: "easeInOut" }
+            }}
+            className="w-[70%] h-[70%] rounded-full overflow-hidden flex items-center justify-center filter grayscale contrast-125"
+          >
+            <img src={logo} alt="SKOMPAS Watermark" className="w-full h-full object-cover scale-[1.35]" />
+          </motion.div>
+        </div>
+
+        {/* Floating Corner Orb */}
+        <motion.div
+          animate={{
+            y: [-12, 12, -12],
+            rotate: [0, 10, 0]
+          }}
+          transition={{
+            duration: 14,
+            repeat: Infinity,
+            ease: "easeInOut"
+          }}
+          className="absolute top-12 right-[5%] w-36 h-36 rounded-full p-2 ring-1 ring-amber-500/20 opacity-[0.08] hidden lg:flex items-center justify-center overflow-hidden"
+        >
+          <img src={logo} alt="SKOMPAS Watermark" className="w-full h-full object-cover scale-[1.4]" />
+        </motion.div>
+      </div>
 
       {/* Brand & Context Side (Hidden on Mobile) */}
       <div className="hidden md:flex flex-1 flex-col justify-between p-16 relative z-10 border-r border-[#eee]/40 bg-zinc-50/50">

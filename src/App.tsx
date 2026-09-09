@@ -9,6 +9,7 @@ import { Dashboard } from "@/src/pages/Dashboard";
 import { EditorPage } from "@/src/pages/EditorPage";
 import { BudgetTemplatePage } from "@/src/pages/BudgetTemplatePage";
 import { CbydpTemplatePage } from "@/src/pages/CbydpTemplatePage";
+import { AbyipTemplatePage } from "@/src/pages/AbyipTemplatePage";
 import { LoginPage } from "@/src/pages/LoginPage";
 import { AdminDashboard } from "@/src/pages/AdminDashboard";
 import { Navbar } from "@/src/components/layout/Navbar";
@@ -52,6 +53,10 @@ function AppRoutes() {
         <Route 
           path="/cbydp-template" 
           element={user && role ? <CbydpTemplatePage /> : <Navigate to="/login" />} 
+        />
+        <Route 
+          path="/abyip-template" 
+          element={user && role ? <AbyipTemplatePage /> : <Navigate to="/login" />} 
         />
       </Routes>
     </div>

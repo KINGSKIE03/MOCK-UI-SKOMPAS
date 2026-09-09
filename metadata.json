@@ -1,6 +1,6 @@
 {
   "name": "SKompas: Smart SK Advisor",
-  "description": "Intelligent advisory system for Sangguniang Kabataan with CBYDP template, role-based document compliance, and municipal monitoring.",
+  "description": "Intelligent advisory system for Sangguniang Kabataan with CBYDP, ABYIP, and Annual Budget templates, role-based document compliance, and municipal monitoring.",
   "requestFramePermissions": [],
   "majorCapabilities": [
     "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"

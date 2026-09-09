@@ -596,34 +596,31 @@ Sangguniang Kabataan Chairman & Council
             <div className="space-y-1">
               <h3 className="text-sm font-black text-[#0C1E36]">Annual ABYIP Template</h3>
               <p className="text-[10px] text-zinc-500 font-medium leading-relaxed">
-                Annual Barangay Youth Investment Program (CY 2026). Specifies PPAs, schedules, and budgets mapped directly to CBYDP goals.
+                Annual Barangay Youth Investment Program (CY 2026). Standardized official PDF format with interactive PPA editor, statutory receipts & expenditures, and landscape export.
               </p>
             </div>
           </div>
 
-          <button
-            onClick={() => setIsAbyipModalOpen(true)}
-            disabled={abyipStatus === "locked"}
-            className={`w-full py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-1.5 ${
-              abyipStatus === "locked"
-                ? "bg-zinc-100 text-zinc-400 border border-zinc-200 cursor-not-allowed"
-                : abyipStatus === "submitted"
-                ? "bg-emerald-600 hover:bg-emerald-700 text-white shadow-md cursor-pointer"
-                : "bg-[#0C1E36] hover:bg-[#C89311] text-white shadow-md cursor-pointer"
-            }`}
-          >
-            {abyipStatus === "locked" ? (
-              <>
-                <Lock className="w-3 h-3 text-zinc-400" />
-                Locked by Sequence
-              </>
-            ) : (
-              <>
-                <FileText className="w-3.5 h-3.5" />
-                {abyipStatus === "submitted" ? "View Submitted ABYIP" : "View & Complete ABYIP"}
-              </>
-            )}
-          </button>
+          <div className="space-y-2">
+            <Link
+              to="/abyip-template"
+              className={`w-full py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                abyipStatus === "submitted"
+                  ? "bg-emerald-600 hover:bg-emerald-700 text-white shadow-md"
+                  : "bg-[#0C1E36] hover:bg-[#C89311] text-white shadow-md"
+              }`}
+            >
+              <FileText className="w-3.5 h-3.5" />
+              <span>Open ABYIP Template</span>
+            </Link>
+
+            <button
+              onClick={() => setIsAbyipModalOpen(true)}
+              className="w-full py-1.5 text-[8.5px] font-extrabold uppercase tracking-wider text-zinc-500 hover:text-[#0C1E36] transition-colors flex items-center justify-center gap-1 cursor-pointer"
+            >
+              <span>Quick Submission Form</span>
+            </button>
+          </div>
         </div>
 
         {/* Step 3: Annual Budget */}
@@ -659,34 +656,24 @@ Sangguniang Kabataan Chairman & Council
             </div>
 
             <div className="space-y-1">
-              <h3 className="text-sm font-black text-[#0C1E36]">Annual Budget Spreadsheet</h3>
+              <h3 className="text-sm font-black text-[#0C1E36]">Annual Budget Template</h3>
               <p className="text-[10px] text-zinc-500 font-medium leading-relaxed">
-                Official Excel-style fiscal budget builder. Consolidates general admin (PS/MOOE) and YDEP funds into compliance sheets.
+                Official RA 10742 & DBM youth budget format. Standard 2-page landscape document consolidating General Administration (PS/MOOE) and SK YDEP programs.
               </p>
             </div>
           </div>
 
-          <button
-            onClick={() => navigate("/budget-template")}
-            disabled={budgetStatus === "locked"}
-            className={`w-full py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-1.5 ${
-              budgetStatus === "locked"
-                ? "bg-zinc-100 text-zinc-400 border border-zinc-200 cursor-not-allowed"
-                : "bg-gradient-to-r from-emerald-500 to-emerald-600 text-white shadow-lg shadow-emerald-500/10 hover:scale-[1.01] active:scale-95 cursor-pointer"
+          <Link
+            to="/budget-template"
+            className={`w-full py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+              budgetStatus === "submitted"
+                ? "bg-emerald-600 hover:bg-emerald-700 text-white shadow-md"
+                : "bg-[#0C1E36] hover:bg-[#C89311] text-white shadow-md"
             }`}
           >
-            {budgetStatus === "locked" ? (
-              <>
-                <Lock className="w-3 h-3 text-zinc-400" />
-                Locked by Sequence
-              </>
-            ) : (
-              <>
-                <FileSpreadsheet className="w-3.5 h-3.5" />
-                {budgetStatus === "submitted" ? "View Budget Spreadsheet" : "Complete Budget Spreadsheet"}
-              </>
-            )}
-          </button>
+            <FileSpreadsheet className="w-3.5 h-3.5" />
+            <span>{budgetStatus === "submitted" ? "View Submitted Budget" : "Open Budget Template"}</span>
+          </Link>
         </div>
       </div>
 

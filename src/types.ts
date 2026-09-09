@@ -119,11 +119,128 @@ export interface CbydpDocument {
   approvedByTitle: string;
   attestedByName?: string;
   attestedByTitle?: string;
+  leftLogoUrl?: string; // Official Barangay Seal
+  rightLogoUrl?: string; // Sangguniang Kabataan Emblem
   sections: CbydpCenterSection[];
   totalAppropriation: number;
   updatedAt?: string;
   createdAt?: string;
   status: "Draft" | "Pending Review" | "Approved";
 }
+
+export interface AbyipRowItem {
+  id: string;
+  referenceCode: string;
+  ppaName: string;
+  subItems?: string[];
+  description: string;
+  expectedResults: string;
+  performanceIndicator: string;
+  periodImplementation: string;
+  mooe: number;
+  co: number;
+  ps: number;
+  total: number;
+  personResponsible: string;
+}
+
+export interface AbyipCenterSection {
+  id: string;
+  centerName: string; // e.g. "GOVERNANCE", "ACTIVE CITIZENSHIP"
+  programHeader?: string; // e.g. "GENERAL ADMINISTRATIVE PROGRAM", "GOVERNANCE PROGRAM"
+  items: AbyipRowItem[];
+}
+
+export interface AbyipReceiptItem {
+  id: string;
+  particular: string;
+  amount: number;
+}
+
+export interface AbyipExpenditureItem {
+  id: string;
+  programGroup: string;
+  category?: string;
+  subCategory?: string;
+  objective: string;
+  accountCode: string;
+  budgetAmount: number;
+  expectedResult: string;
+  performanceIndicator: string;
+}
+
+export interface AbyipDocument {
+  id: string;
+  barangayName: string;
+  municipality: string;
+  province: string;
+  calendarYear: string; // e.g. "2026"
+  leftLogoUrl?: string;
+  rightLogoUrl?: string;
+  preparedByName: string;
+  preparedByTitle: string;
+  approvedByName: string;
+  approvedByTitle: string;
+  treasurerName?: string;
+  treasurerTitle?: string;
+  sections: AbyipCenterSection[];
+  receipts?: AbyipReceiptItem[];
+  expenditures?: AbyipExpenditureItem[];
+  grandTotal: number;
+  updatedAt?: string;
+  createdAt?: string;
+  status: "Draft" | "Pending Review" | "Approved";
+}
+
+export interface BudgetLineItem {
+  id: string;
+  name: string;
+  amount: number;
+}
+
+export interface BudgetSubcategory {
+  id: string;
+  label?: string; // e.g. "*BASIC LIFE SUPPORT WITH FIRST AND TRAINING"
+  expectedResults?: string;
+  performanceIndicator?: string;
+  items: BudgetLineItem[];
+}
+
+export interface BudgetYdepProgram {
+  id: string;
+  name: string; // e.g. "HEALTH", "GOVERNANCE", "ACTIVE CITIZENSHIP", "EDUCATION", "ENVIRONMENT"
+  expectedResults: string;
+  performanceIndicator: string;
+  subcategories: BudgetSubcategory[];
+}
+
+export interface BudgetDocument {
+  id: string;
+  barangayName: string;
+  municipality: string;
+  province: string;
+  calendarYear: string; // "2026"
+  leftLogoUrl?: string; // Barangay seal
+  rightLogoUrl?: string; // Sangguniang Kabataan Emblem
+  preparedByName: string;
+  preparedByTitle: string;
+  approvedByName: string;
+  approvedByTitle: string;
+  beginningBalance: number;
+  tenPercentFund: number;
+  // General Administration Program
+  gaPersonalServices: BudgetLineItem[];
+  gaExpected: string;
+  gaIndicator: string;
+  gaMOOE: BudgetLineItem[];
+  gaMooeExpected?: string;
+  gaMooeIndicator?: string;
+  // SK Youth Development and Empowerment Programs (YDEP)
+  ydepPrograms: BudgetYdepProgram[];
+  status: "Draft" | "Pending Review" | "Approved";
+  updatedAt?: string;
+  createdAt?: string;
+}
+
 
 

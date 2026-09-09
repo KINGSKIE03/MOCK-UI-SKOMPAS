@@ -31,10 +31,14 @@ export function Navbar() {
 
   const navItems = role === 'Admin'
     ? [
-        { label: "Monitoring Board", path: "/dashboard", icon: Landmark }
+        { label: "Monitoring Board", path: "/dashboard", icon: Landmark },
+        { label: "Annual Budget", path: "/budget-template", icon: FilePlus }
       ]
     : [
-        { label: "Overview", path: "/dashboard", icon: Home }
+        { label: "Overview", path: "/dashboard", icon: Home },
+        { label: "CBYDP Plan", path: "/cbydp-template", icon: FilePlus },
+        { label: "ABYIP Program", path: "/abyip-template", icon: FilePlus },
+        { label: "Annual Budget", path: "/budget-template", icon: FilePlus }
       ];
 
   return (

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { 
   FileText, 
@@ -21,11 +21,13 @@ import {
   HelpCircle,
   FileCheck2,
   X,
-  Loader2
+  Loader2,
+  Upload
 } from "lucide-react";
 import { useNavigate, Link } from "react-router-dom";
 import html2canvas from "html2canvas-pro";
 import { jsPDF } from "jspdf";
+import { exportOfficialLandscapePdf } from "../lib/pdfExport";
 import { useAuth } from "../components/auth/AuthProvider";
 import { 
   CbydpDocument, 
@@ -66,6 +68,43 @@ export function CbydpTemplatePage() {
     isNew: boolean;
   } | null>(null);
 
+  // Logo upload input refs
+  const leftLogoInputRef = useRef<HTMLInputElement>(null);
+  const rightLogoInputRef = useRef<HTMLInputElement>(null);
+
+  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>, position: "left" | "right") => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      showToast("Please upload a valid image file (PNG, JPG, SVG)", "error");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      if (position === "left") {
+        setDoc((prev) => ({ ...prev, leftLogoUrl: result }));
+        showToast("Sangguniang Kabataan logo updated!", "success");
+      } else {
+        setDoc((prev) => ({ ...prev, rightLogoUrl: result }));
+        showToast("Barangay Seal updated!", "success");
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const removeLogo = (position: "left" | "right") => {
+    if (position === "left") {
+      setDoc((prev) => ({ ...prev, leftLogoUrl: undefined }));
+      showToast("Left logo reset to default", "info");
+    } else {
+      setDoc((prev) => ({ ...prev, rightLogoUrl: undefined }));
+      showToast("Right logo reset to default", "info");
+    }
+  };
+
   // Load document when barangay changes
   useEffect(() => {
     const loaded = loadCbydpDocument(selectedBarangay, user?.displayName, undefined);
@@ -105,7 +144,7 @@ export function CbydpTemplatePage() {
   const handleExportPdf = async () => {
     if (isExportingPdf) return;
     setIsExportingPdf(true);
-    showToast("Generating official landscape PDF, please wait...", "info");
+    showToast("Generating official landscape A4 PDF, please wait...", "info");
 
     const wasEditing = isEditing;
     if (wasEditing) {
@@ -114,91 +153,25 @@ export function CbydpTemplatePage() {
     }
 
     try {
-      const sheet = document.querySelector(".cbydp-sheet") as HTMLElement;
-      if (!sheet) {
-        throw new Error("Document container not found");
-      }
+      const pageElements = Array.from(
+        document.querySelectorAll(".cbydp-page-break")
+      ) as HTMLElement[];
 
-      // Initialize jsPDF in landscape A4
-      const pdf = new jsPDF({
-        orientation: "landscape",
-        unit: "mm",
-        format: "a4",
-        compress: true,
-      });
-
-      const pdfWidth = 297;
-      const pdfHeight = 210;
-      const margin = 8;
-      const targetWidth = pdfWidth - (margin * 2); // 281mm
-      const targetHeight = pdfHeight - (margin * 2); // 194mm
-
-      const pageElements = document.querySelectorAll(".cbydp-page-break");
-
-      if (pageElements.length > 0) {
-        for (let i = 0; i < pageElements.length; i++) {
-          const el = pageElements[i] as HTMLElement;
-          const canvas = await html2canvas(el, {
-            scale: 2,
-            useCORS: true,
-            logging: false,
-            backgroundColor: "#ffffff",
-            windowWidth: 1400,
-          });
-
-          const imgData = canvas.toDataURL("image/jpeg", 0.95);
-          const imgHeight = (canvas.height * targetWidth) / canvas.width;
-
-          if (i > 0) {
-            pdf.addPage("a4", "landscape");
-          }
-
-          if (imgHeight <= targetHeight) {
-            pdf.addImage(imgData, "JPEG", margin, margin, targetWidth, imgHeight, undefined, "FAST");
-          } else {
-            let heightLeft = imgHeight;
-            let currentY = margin;
-            pdf.addImage(imgData, "JPEG", margin, currentY, targetWidth, imgHeight, undefined, "FAST");
-            heightLeft -= targetHeight;
-
-            while (heightLeft > 0) {
-              pdf.addPage("a4", "landscape");
-              currentY = -(imgHeight - heightLeft) + margin;
-              pdf.addImage(imgData, "JPEG", margin, currentY, targetWidth, imgHeight, undefined, "FAST");
-              heightLeft -= targetHeight;
-            }
-          }
-        }
-      } else {
-        const canvas = await html2canvas(sheet, {
-          scale: 2,
-          useCORS: true,
-          logging: false,
-          backgroundColor: "#ffffff",
-          windowWidth: 1400,
-        });
-
-        const imgData = canvas.toDataURL("image/jpeg", 0.95);
-        const totalHeight = (canvas.height * targetWidth) / canvas.width;
-        let heightLeft = totalHeight;
-        let position = margin;
-
-        pdf.addImage(imgData, "JPEG", margin, position, targetWidth, totalHeight, undefined, "FAST");
-        heightLeft -= targetHeight;
-
-        while (heightLeft > 0) {
-          position = heightLeft - totalHeight + margin;
-          pdf.addPage("a4", "landscape");
-          pdf.addImage(imgData, "JPEG", margin, position, targetWidth, totalHeight, undefined, "FAST");
-          heightLeft -= targetHeight;
-        }
+      if (pageElements.length === 0) {
+        throw new Error("No document pages found to export");
       }
 
       const cleanBarangay = doc.barangayName.replace(/[^a-zA-Z0-9_-]/g, "_");
       const cleanYears = doc.calendarYears.replace(/[^a-zA-Z0-9_-]/g, "-");
       const filename = `CBYDP_${cleanBarangay}_CY${cleanYears}.pdf`;
 
-      pdf.save(filename);
+      await exportOfficialLandscapePdf(pageElements, {
+        filename,
+        marginMm: 8,
+        scale: 2,
+        windowWidth: 1200,
+      });
+
       showToast(`Exported ${filename} successfully!`, "success");
     } catch (err: any) {
       console.error("PDF generation failed:", err);
@@ -611,28 +584,83 @@ export function CbydpTemplatePage() {
           </div>
         )}
 
+        {/* Hidden file inputs for Logo upload */}
+        <input 
+          type="file" 
+          ref={leftLogoInputRef} 
+          onChange={(e) => handleLogoUpload(e, "left")} 
+          accept="image/*" 
+          className="hidden" 
+        />
+        <input 
+          type="file" 
+          ref={rightLogoInputRef} 
+          onChange={(e) => handleLogoUpload(e, "right")} 
+          accept="image/*" 
+          className="hidden" 
+        />
+
         {/* CBYDP DOCUMENT PAPER CANVAS */}
-        <div className="cbydp-sheet bg-white text-zinc-900 border border-zinc-300 shadow-2xl rounded-2xl p-8 sm:p-12 print:border-none print:shadow-none print:rounded-none print:p-0">
+        <div className="cbydp-document-container space-y-8 print:space-y-0">
           
           {/* ======================================================== */}
           {/* PAGE 1: TITLE & COVER PAGE (Identical to PDF Page 1)     */}
           {/* ======================================================== */}
-          <div className="min-h-[520px] flex flex-col justify-between text-center pb-12 border-b-2 border-zinc-800 print:border-b-0 print:min-h-screen print:pb-0 cbydp-page-break">
+          <div 
+            id="cbydp-cover-page"
+            className="cbydp-page-break print-page-break-after bg-white text-zinc-900 border border-zinc-200 shadow-sm rounded-lg p-8 sm:p-12 print:border-none print:shadow-none print:rounded-none print:p-0 min-h-[640px] flex flex-col justify-between"
+          >
             
             {/* Header Logos & Republic Header */}
             <div className="flex items-center justify-between gap-4 pt-4">
               
               {/* Left Circular Emblem: Sangguniang Kabataan */}
-              <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-full border-4 border-amber-500/80 bg-white p-1 flex items-center justify-center shadow-sm shrink-0">
-                <div className="w-full h-full rounded-full border-2 border-blue-900 bg-blue-950 flex flex-col items-center justify-center text-white text-center p-1 relative overflow-hidden">
-                  <span className="text-[7.5px] font-black tracking-tighter uppercase text-amber-300 leading-tight">
-                    SANGGUNIANG KABATAAN
-                  </span>
-                  <div className="text-amber-400 font-black text-xl leading-none my-0.5">★</div>
-                  <span className="text-[6.5px] font-bold uppercase tracking-wider text-slate-200 leading-none">
-                    BARANGAY {doc.barangayName.toUpperCase()}
-                  </span>
+              <div className="flex flex-col items-center gap-1 shrink-0">
+                <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-full border-4 border-amber-500/80 bg-white p-1 flex items-center justify-center shadow-sm shrink-0 relative group overflow-hidden">
+                  {doc.leftLogoUrl ? (
+                    <img src={doc.leftLogoUrl} alt="SK Logo" className="w-full h-full object-contain rounded-full" />
+                  ) : (
+                    <div className="w-full h-full rounded-full border-2 border-blue-900 bg-blue-950 flex flex-col items-center justify-center text-white text-center p-1 relative overflow-hidden">
+                      <span className="text-[7.5px] font-black tracking-tighter uppercase text-amber-300 leading-tight">
+                        SANGGUNIANG KABATAAN
+                      </span>
+                      <div className="text-amber-400 font-black text-xl leading-none my-0.5">★</div>
+                      <span className="text-[6.5px] font-bold uppercase tracking-wider text-slate-200 leading-none">
+                        BARANGAY {doc.barangayName.toUpperCase()}
+                      </span>
+                    </div>
+                  )}
+
+                  {isEditing && (
+                    <div 
+                      onClick={() => leftLogoInputRef.current?.click()}
+                      className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center text-white cursor-pointer transition-opacity rounded-full p-1 print:hidden"
+                      title="Upload Sangguniang Kabataan Logo"
+                    >
+                      <Upload className="w-4 h-4 mb-0.5 text-amber-300" />
+                      <span className="text-[7px] font-black uppercase">Change</span>
+                    </div>
+                  )}
                 </div>
+
+                {isEditing && (
+                  <div className="flex items-center gap-1 print:hidden">
+                    <button
+                      onClick={() => leftLogoInputRef.current?.click()}
+                      className="text-[8px] font-bold text-blue-700 hover:underline flex items-center gap-0.5"
+                    >
+                      <Upload className="w-2.5 h-2.5" /> Upload Logo
+                    </button>
+                    {doc.leftLogoUrl && (
+                      <button
+                        onClick={() => removeLogo("left")}
+                        className="text-[8px] font-bold text-rose-600 hover:underline"
+                      >
+                        Reset
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Center Republic Header Texts */}
@@ -673,19 +701,55 @@ export function CbydpTemplatePage() {
               </div>
 
               {/* Right Circular Emblem: Barangay Seal */}
-              <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-full border-4 border-blue-900/80 bg-white p-1 flex items-center justify-center shadow-sm shrink-0">
-                <div className="w-full h-full rounded-full border-2 border-amber-500 bg-amber-50 flex flex-col items-center justify-center text-center p-1 text-zinc-900">
-                  <span className="text-[7.5px] font-black uppercase text-blue-950 leading-tight">
-                    BARANGAY
-                  </span>
-                  <span className="text-[8.5px] font-black uppercase text-amber-700 leading-tight">
-                    {doc.barangayName.toUpperCase()}
-                  </span>
-                  <div className="text-emerald-700 font-black text-base my-0.5">🌴</div>
-                  <span className="text-[6.5px] font-bold uppercase text-zinc-600 leading-none">
-                    LAAK, DAVAO DE ORO
-                  </span>
+              <div className="flex flex-col items-center gap-1 shrink-0">
+                <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-full border-4 border-blue-900/80 bg-white p-1 flex items-center justify-center shadow-sm shrink-0 relative group overflow-hidden">
+                  {doc.rightLogoUrl ? (
+                    <img src={doc.rightLogoUrl} alt="Barangay Seal" className="w-full h-full object-contain rounded-full" />
+                  ) : (
+                    <div className="w-full h-full rounded-full border-2 border-amber-500 bg-amber-50 flex flex-col items-center justify-center text-center p-1 text-zinc-900">
+                      <span className="text-[7.5px] font-black uppercase text-blue-950 leading-tight">
+                        BARANGAY
+                      </span>
+                      <span className="text-[8.5px] font-black uppercase text-amber-700 leading-tight">
+                        {doc.barangayName.toUpperCase()}
+                      </span>
+                      <div className="text-emerald-700 font-black text-base my-0.5">🌴</div>
+                      <span className="text-[6.5px] font-bold uppercase text-zinc-600 leading-none">
+                        LAAK, DAVAO DE ORO
+                      </span>
+                    </div>
+                  )}
+
+                  {isEditing && (
+                    <div 
+                      onClick={() => rightLogoInputRef.current?.click()}
+                      className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center text-white cursor-pointer transition-opacity rounded-full p-1 print:hidden"
+                      title="Upload Barangay Seal"
+                    >
+                      <Upload className="w-4 h-4 mb-0.5 text-amber-300" />
+                      <span className="text-[7px] font-black uppercase">Change</span>
+                    </div>
+                  )}
                 </div>
+
+                {isEditing && (
+                  <div className="flex items-center gap-1 print:hidden">
+                    <button
+                      onClick={() => rightLogoInputRef.current?.click()}
+                      className="text-[8px] font-bold text-blue-700 hover:underline flex items-center gap-0.5"
+                    >
+                      <Upload className="w-2.5 h-2.5" /> Upload Seal
+                    </button>
+                    {doc.rightLogoUrl && (
+                      <button
+                        onClick={() => removeLogo("right")}
+                        className="text-[8px] font-bold text-rose-600 hover:underline"
+                      >
+                        Reset
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -717,15 +781,15 @@ export function CbydpTemplatePage() {
             </div>
 
             {/* Subtitle / Center note */}
-            <div className="text-left text-xs font-black uppercase tracking-wider text-zinc-700 pb-2">
-              Center of Participation: <span className="font-extrabold text-blue-950">GOVERNANCE</span>
+            <div className="text-left text-xs font-black uppercase tracking-wider text-zinc-700 pb-2 border-t border-zinc-200 pt-3">
+              Center of Participation: <span className="font-extrabold text-blue-950">ALL CENTERS / SANGGUNIANG KABATAAN</span>
             </div>
           </div>
 
           {/* ======================================================== */}
           {/* SECTIONS & TABLES FOR EACH CENTER OF PARTICIPATION       */}
           {/* ======================================================== */}
-          <div className="space-y-12 pt-8">
+          <div className="space-y-8 print:space-y-0">
             {doc.sections.map((section, sIndex) => {
               const secTotal = calculateCbydpSectionTotal(section);
 
@@ -733,10 +797,11 @@ export function CbydpTemplatePage() {
                 <div 
                   key={section.id} 
                   id={section.id} 
-                  className="cbydp-page-break pt-4 space-y-4"
+                  className="cbydp-page-break bg-white text-zinc-900 border border-zinc-200 shadow-sm rounded-lg p-6 sm:p-8 print:border-none print:shadow-none print:rounded-none print:p-0 flex flex-col justify-between"
                 >
-                  {/* Center Header & Agenda Statement */}
-                  <div className="space-y-2 border-b-2 border-zinc-900 pb-2">
+                  <div className="space-y-4">
+                    {/* Center Header & Agenda Statement */}
+                    <div className="space-y-2 border-b-2 border-zinc-900 pb-2">
                     <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
                       <h2 className="text-base sm:text-lg font-black uppercase tracking-wide text-zinc-900">
                         Center of Participation: <span className="text-blue-950 font-black">{section.centerName}</span>
@@ -785,48 +850,60 @@ export function CbydpTemplatePage() {
                     </div>
                   </div>
 
-                  {/* Standard CBYDP 7-Column Table */}
-                  <div className="overflow-x-auto">
-                    <table className="cbydp-table w-full border-collapse border border-zinc-900 text-[11px] leading-tight text-left">
+                  {/* Standard CBYDP 7-Column Table - Crisp border-separate prevents any header text clipping */}
+                  <div className="w-full pt-1">
+                    <table className="cbydp-table w-full border-separate border-spacing-0 border-t border-l border-zinc-900 text-[10px] leading-snug text-left">
+                      <colgroup>
+                        <col style={{ width: "16%" }} />
+                        <col style={{ width: "15%" }} />
+                        <col style={{ width: "16%" }} />
+                        <col style={{ width: "3.5%" }} />
+                        <col style={{ width: "3.5%" }} />
+                        <col style={{ width: "3.5%" }} />
+                        <col style={{ width: "18%" }} />
+                        <col style={{ width: "11.5%" }} />
+                        <col style={{ width: "13%" }} />
+                        {isEditing && <col style={{ width: "8%" }} className="print:hidden" />}
+                      </colgroup>
                       <thead>
-                        <tr className="bg-zinc-100 text-zinc-900 font-black uppercase text-center border-b border-zinc-900">
-                          <th className="border border-zinc-900 p-2.5 w-[16%] align-middle" rowSpan={2}>
+                        <tr className="bg-zinc-100 text-zinc-900 font-black uppercase text-center">
+                          <th className="border-r border-b border-zinc-900 px-2 py-3.5 w-[16%] align-middle text-[9.5px] tracking-wide" rowSpan={2}>
                             Youth Development Concern
                           </th>
-                          <th className="border border-zinc-900 p-2.5 w-[15%] align-middle" rowSpan={2}>
+                          <th className="border-r border-b border-zinc-900 px-2 py-3.5 w-[15%] align-middle text-[9.5px] tracking-wide" rowSpan={2}>
                             Objectives
                           </th>
-                          <th className="border border-zinc-900 p-2.5 w-[16%] align-middle" rowSpan={2}>
+                          <th className="border-r border-b border-zinc-900 px-2 py-3.5 w-[16%] align-middle text-[9.5px] tracking-wide" rowSpan={2}>
                             Performance Indicator
                           </th>
-                          <th className="border border-zinc-900 p-1.5 align-middle" colSpan={3}>
+                          <th className="border-r border-b border-zinc-900 px-1 py-2 align-middle text-[9.5px] tracking-wide" colSpan={3}>
                             Target
                           </th>
-                          <th className="border border-zinc-900 p-2.5 w-[20%] align-middle" rowSpan={2}>
+                          <th className="border-r border-b border-zinc-900 px-2 py-3.5 w-[18%] align-middle text-[9.5px] tracking-wide" rowSpan={2}>
                             PPA'S
                           </th>
-                          <th className="border border-zinc-900 p-2.5 w-[11%] align-middle" rowSpan={2}>
+                          <th className="border-r border-b border-zinc-900 px-2 py-3.5 w-[11.5%] align-middle text-[9.5px] tracking-wide" rowSpan={2}>
                             Budget
                           </th>
-                          <th className="border border-zinc-900 p-2.5 w-[12%] align-middle" rowSpan={2}>
+                          <th className="border-r border-b border-zinc-900 px-2 py-3.5 w-[13%] align-middle text-[9.5px] tracking-wide" rowSpan={2}>
                             Person Responsible
                           </th>
                           {isEditing && (
-                            <th className="border border-zinc-900 p-2 w-[8%] align-middle print:hidden" rowSpan={2}>
+                            <th className="border-r border-b border-zinc-900 px-2 py-3.5 w-[8%] align-middle print:hidden text-[9.5px] tracking-wide" rowSpan={2}>
                               Actions
                             </th>
                           )}
                         </tr>
-                        <tr className="bg-zinc-100 text-zinc-900 font-extrabold uppercase text-center border-b border-zinc-900">
-                          <th className="border border-zinc-900 p-1.5 w-[3.5%]">{doc.targetYearLabels[0] || "2026"}</th>
-                          <th className="border border-zinc-900 p-1.5 w-[3.5%]">{doc.targetYearLabels[1] || "2027"}</th>
-                          <th className="border border-zinc-900 p-1.5 w-[3.5%]">{doc.targetYearLabels[2] || "2028"}</th>
+                        <tr className="bg-zinc-100 text-zinc-900 font-extrabold uppercase text-center">
+                          <th className="border-r border-b border-zinc-900 px-1 py-1.5 w-[3.5%] text-[9px]">{doc.targetYearLabels[0] || "2026"}</th>
+                          <th className="border-r border-b border-zinc-900 px-1 py-1.5 w-[3.5%] text-[9px]">{doc.targetYearLabels[1] || "2027"}</th>
+                          <th className="border-r border-b border-zinc-900 px-1 py-1.5 w-[3.5%] text-[9px]">{doc.targetYearLabels[2] || "2028"}</th>
                         </tr>
                       </thead>
                       <tbody>
                         {section.items.length === 0 ? (
                           <tr>
-                            <td colSpan={isEditing ? 10 : 9} className="border border-zinc-900 p-6 text-center text-zinc-400 italic">
+                            <td colSpan={isEditing ? 10 : 9} className="border-r border-b border-zinc-900 p-6 text-center text-zinc-400 italic">
                               No items recorded for this Center of Participation.
                             </td>
                           </tr>
@@ -834,38 +911,38 @@ export function CbydpTemplatePage() {
                           section.items.map((item) => (
                             <tr key={item.id} className="hover:bg-amber-50/20 transition-colors align-top">
                               {/* Concern */}
-                              <td className="border border-zinc-900 p-2 text-zinc-800 leading-snug">
+                              <td className="border-r border-b border-zinc-900 p-2 text-zinc-800 leading-snug">
                                 {item.concern}
                               </td>
 
                               {/* Objectives */}
-                              <td className="border border-zinc-900 p-2 text-zinc-800 leading-snug">
+                              <td className="border-r border-b border-zinc-900 p-2 text-zinc-800 leading-snug">
                                 {item.objectives}
                               </td>
 
                               {/* Performance Indicator */}
-                              <td className="border border-zinc-900 p-2 text-zinc-800 leading-snug">
+                              <td className="border-r border-b border-zinc-900 p-2 text-zinc-800 leading-snug">
                                 {item.performanceIndicator}
                               </td>
 
                               {/* Target Years */}
-                              <td className="border border-zinc-900 p-2 text-center font-bold text-zinc-900">
+                              <td className="border-r border-b border-zinc-900 p-2 text-center font-bold text-zinc-900">
                                 {item.targetYear1}
                               </td>
-                              <td className="border border-zinc-900 p-2 text-center font-bold text-zinc-900">
+                              <td className="border-r border-b border-zinc-900 p-2 text-center font-bold text-zinc-900">
                                 {item.targetYear2}
                               </td>
-                              <td className="border border-zinc-900 p-2 text-center font-bold text-zinc-900">
+                              <td className="border-r border-b border-zinc-900 p-2 text-center font-bold text-zinc-900">
                                 {item.targetYear3}
                               </td>
 
                               {/* PPA'S */}
-                              <td className="border border-zinc-900 p-2 font-medium text-zinc-900 leading-snug">
+                              <td className="border-r border-b border-zinc-900 p-2 font-medium text-zinc-900 leading-snug">
                                 {item.ppas}
                               </td>
 
                               {/* Budget (Category + Amount) */}
-                              <td className="border border-zinc-900 p-2 text-right">
+                              <td className="border-r border-b border-zinc-900 p-2 text-right">
                                 <span className="block text-[9px] font-black uppercase text-zinc-500">
                                   {item.budgetCategory}
                                 </span>
@@ -875,13 +952,13 @@ export function CbydpTemplatePage() {
                               </td>
 
                               {/* Person Responsible */}
-                              <td className="border border-zinc-900 p-2 font-bold text-zinc-900 text-xs uppercase leading-snug">
+                              <td className="border-r border-b border-zinc-900 p-2 font-bold text-zinc-900 text-xs uppercase leading-snug">
                                 {item.personResponsible}
                               </td>
 
                               {/* Edit Actions in Edit Mode (Hidden in Print) */}
                               {isEditing && (
-                                <td className="border border-zinc-900 p-2 text-center align-middle print:hidden">
+                                <td className="border-r border-b border-zinc-900 p-2 text-center align-middle print:hidden">
                                   <div className="flex items-center justify-center gap-1">
                                     <button
                                       onClick={() => handleOpenEditItem(section.id, item)}
@@ -905,11 +982,11 @@ export function CbydpTemplatePage() {
                         )}
                       </tbody>
                       <tfoot>
-                        <tr className="bg-zinc-100 font-black text-xs text-zinc-900 border-t-2 border-zinc-900">
-                          <td colSpan={6} className="border border-zinc-900 p-2.5 uppercase tracking-wider">
+                        <tr className="bg-zinc-100/90 font-black text-xs text-zinc-900">
+                          <td colSpan={6} className="border-r border-b border-zinc-900 p-2.5 uppercase tracking-wider">
                             TOTAL {section.centerName}
                           </td>
-                          <td colSpan={isEditing ? 4 : 3} className="border border-zinc-900 p-2.5 text-right font-black text-sm text-blue-950">
+                          <td colSpan={isEditing ? 4 : 3} className="border-r border-b border-zinc-900 p-2.5 text-right font-black text-sm text-blue-950 font-mono">
                             ₱{secTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </td>
                         </tr>
@@ -917,6 +994,13 @@ export function CbydpTemplatePage() {
                     </table>
                   </div>
                 </div>
+
+                {/* Official Page Footer */}
+                <div className="pt-4 mt-6 flex items-center justify-between text-[9px] font-bold text-zinc-500 uppercase tracking-wider border-t border-zinc-300">
+                  <span>Comprehensive Barangay Youth Development Plan (CBYDP) • CY {doc.calendarYears}</span>
+                  <span>Barangay {doc.barangayName} • Center of Participation: {section.centerName}</span>
+                </div>
+              </div>
               );
             })}
           </div>
@@ -924,98 +1008,156 @@ export function CbydpTemplatePage() {
           {/* ======================================================== */}
           {/* FINAL SUMMARY & SIGNATORIES (Matching PDF Page 32)       */}
           {/* ======================================================== */}
-          <div className="cbydp-page-break pt-12 mt-12 border-t-2 border-zinc-900 space-y-8">
-            
-            {/* Grand Summary Appropriation Box */}
-            <div className="border-2 border-zinc-900 bg-zinc-50 p-4 sm:p-6 flex flex-col sm:flex-row items-center justify-between gap-4">
-              <div>
-                <span className="text-xs font-black uppercase tracking-widest text-zinc-500 block">
-                  3-Year Statutory Youth Development Fund
-                </span>
-                <h3 className="text-xl sm:text-2xl font-black uppercase tracking-tight text-zinc-900">
-                  TOTAL APPROPRIATION
-                </h3>
+          <div 
+            id="cbydp-signatories-page"
+            className="cbydp-page-break keep-together bg-white text-zinc-900 border border-zinc-200 shadow-sm rounded-lg p-8 sm:p-12 mb-8 print:border-none print:shadow-none print:rounded-none print:p-0 flex flex-col justify-between"
+          >
+            <div className="space-y-6">
+              {/* Top Header */}
+              <div className="text-center space-y-1 border-b pb-4 border-zinc-200">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-zinc-600">
+                  Republic of the Philippines • Province of {doc.province} • Municipality of {doc.municipality} • Barangay {doc.barangayName}
+                </p>
+                <h2 className="text-base sm:text-lg font-black uppercase tracking-tight text-zinc-950">
+                  COMPREHENSIVE BARANGAY YOUTH DEVELOPMENT PLAN (CBYDP) CY {doc.calendarYears}
+                </h2>
+                <p className="text-xs font-black uppercase tracking-widest text-blue-950">
+                  STATUTORY SUMMARY & OFFICIAL APPROVAL
+                </p>
               </div>
 
-              <div className="text-2xl sm:text-4xl font-black text-blue-950 tracking-tight">
-                ₱{grandTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              {/* 10-Centers Summary Table */}
+              <div className="w-full">
+                <table className="w-full border-separate border-spacing-0 border-t border-l border-zinc-900 text-[10px]">
+                  <thead>
+                    <tr className="bg-zinc-100 text-zinc-900 font-black uppercase">
+                      <th className="border-r border-b border-zinc-900 px-2 py-3 text-center w-12 text-[9.5px]">#</th>
+                      <th className="border-r border-b border-zinc-900 px-2 py-3 text-left text-[9.5px]">Center of Participation</th>
+                      <th className="border-r border-b border-zinc-900 px-2 py-3 text-center w-28 text-[9.5px]">PPA Items</th>
+                      <th className="border-r border-b border-zinc-900 px-2 py-3 text-right w-48 text-[9.5px]">Total Appropriation (3 Years)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {doc.sections.map((sec, idx) => {
+                      const total = calculateCbydpSectionTotal(sec);
+                      return (
+                        <tr key={sec.id} className="hover:bg-zinc-50">
+                          <td className="border-r border-b border-zinc-900 p-2 text-center font-bold text-zinc-500">{idx + 1}</td>
+                          <td className="border-r border-b border-zinc-900 p-2 font-bold uppercase text-zinc-900">{sec.centerName}</td>
+                          <td className="border-r border-b border-zinc-900 p-2 text-center font-medium">{sec.items.length}</td>
+                          <td className="border-r border-b border-zinc-900 p-2 text-right font-mono font-bold text-zinc-950">
+                            ₱{total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                  <tfoot>
+                    <tr className="bg-zinc-100/90 font-black text-xs text-zinc-950">
+                      <td colSpan={3} className="border-r border-b border-zinc-900 p-2.5 uppercase tracking-wider text-right">
+                        GRAND TOTAL APPROPRIATION:
+                      </td>
+                      <td className="border-r border-b border-zinc-900 p-2.5 text-right font-mono text-sm text-blue-950 font-black">
+                        ₱{grandTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+
+              {/* Grand Summary Appropriation Box */}
+              <div className="border-2 border-zinc-900 bg-amber-50/40 p-4 sm:p-5 flex flex-col sm:flex-row items-center justify-between gap-4 rounded-xl">
+                <div>
+                  <span className="text-[10px] font-black uppercase tracking-widest text-zinc-500 block">
+                    3-Year Statutory Youth Development Fund
+                  </span>
+                  <h3 className="text-lg sm:text-xl font-black uppercase tracking-tight text-zinc-900">
+                    TOTAL STATUTORY APPROPRIATION
+                  </h3>
+                </div>
+
+                <div className="text-2xl sm:text-3xl font-black text-blue-950 tracking-tight font-mono">
+                  ₱{grandTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </div>
               </div>
             </div>
 
             {/* Official Signatories (Prepared by & Approved by) */}
-            <div className="pt-10 grid grid-cols-1 sm:grid-cols-2 gap-12 sm:gap-24 text-center">
-              
-              {/* Prepared by: SK Treasurer */}
-              <div className="space-y-4">
-                <p className="text-xs font-bold uppercase text-zinc-600 text-left">Prepared by:</p>
-                <div className="pt-10 border-b border-zinc-900">
+            <div className="pt-8">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-12 sm:gap-24 text-center">
+                
+                {/* Prepared by: SK Treasurer */}
+                <div className="space-y-4">
+                  <p className="text-xs font-bold uppercase text-zinc-600 text-left">Prepared by:</p>
+                  <div className="pt-10 border-b border-zinc-900">
+                    {isEditing ? (
+                      <input
+                        type="text"
+                        value={doc.preparedByName}
+                        onChange={(e) => setDoc({ ...doc, preparedByName: e.target.value.toUpperCase() })}
+                        className="w-full text-center font-black text-sm uppercase border border-zinc-300 rounded p-1 mb-1"
+                        placeholder="NAME OF SK TREASURER"
+                      />
+                    ) : (
+                      <p className="font-black text-sm uppercase tracking-wider text-zinc-900">
+                        {doc.preparedByName}
+                      </p>
+                    )}
+                  </div>
                   {isEditing ? (
                     <input
                       type="text"
-                      value={doc.preparedByName}
-                      onChange={(e) => setDoc({ ...doc, preparedByName: e.target.value.toUpperCase() })}
-                      className="w-full text-center font-black text-sm uppercase border border-zinc-300 rounded p-1 mb-1"
-                      placeholder="NAME OF SK TREASURER"
+                      value={doc.preparedByTitle}
+                      onChange={(e) => setDoc({ ...doc, preparedByTitle: e.target.value })}
+                      className="w-full text-center font-bold text-xs uppercase border border-zinc-300 rounded p-1"
+                      placeholder="TITLE (e.g. SK Treasurer)"
                     />
                   ) : (
-                    <p className="font-black text-sm uppercase tracking-wider text-zinc-900">
-                      {doc.preparedByName}
+                    <p className="text-xs font-bold uppercase tracking-widest text-zinc-700">
+                      {doc.preparedByTitle}
                     </p>
                   )}
                 </div>
-                {isEditing ? (
-                  <input
-                    type="text"
-                    value={doc.preparedByTitle}
-                    onChange={(e) => setDoc({ ...doc, preparedByTitle: e.target.value })}
-                    className="w-full text-center font-bold text-xs uppercase border border-zinc-300 rounded p-1"
-                    placeholder="TITLE (e.g. SK Treasurer)"
-                  />
-                ) : (
-                  <p className="text-xs font-bold uppercase tracking-widest text-zinc-700">
-                    {doc.preparedByTitle}
-                  </p>
-                )}
-              </div>
 
-              {/* Approved by: SK Chairperson */}
-              <div className="space-y-4">
-                <p className="text-xs font-bold uppercase text-zinc-600 text-left">Approved by:</p>
-                <div className="pt-10 border-b border-zinc-900">
+                {/* Approved by: SK Chairperson */}
+                <div className="space-y-4">
+                  <p className="text-xs font-bold uppercase text-zinc-600 text-left">Approved by:</p>
+                  <div className="pt-10 border-b border-zinc-900">
+                    {isEditing ? (
+                      <input
+                        type="text"
+                        value={doc.approvedByName}
+                        onChange={(e) => setDoc({ ...doc, approvedByName: e.target.value.toUpperCase() })}
+                        className="w-full text-center font-black text-sm uppercase border border-zinc-300 rounded p-1 mb-1"
+                        placeholder="NAME OF SK CHAIRPERSON"
+                      />
+                    ) : (
+                      <p className="font-black text-sm uppercase tracking-wider text-zinc-900">
+                        {doc.approvedByName}
+                      </p>
+                    )}
+                  </div>
                   {isEditing ? (
                     <input
                       type="text"
-                      value={doc.approvedByName}
-                      onChange={(e) => setDoc({ ...doc, approvedByName: e.target.value.toUpperCase() })}
-                      className="w-full text-center font-black text-sm uppercase border border-zinc-300 rounded p-1 mb-1"
-                      placeholder="NAME OF SK CHAIRPERSON"
+                      value={doc.approvedByTitle}
+                      onChange={(e) => setDoc({ ...doc, approvedByTitle: e.target.value })}
+                      className="w-full text-center font-bold text-xs uppercase border border-zinc-300 rounded p-1"
+                      placeholder="TITLE (e.g. SK Chairperson)"
                     />
                   ) : (
-                    <p className="font-black text-sm uppercase tracking-wider text-zinc-900">
-                      {doc.approvedByName}
+                    <p className="text-xs font-bold uppercase tracking-widest text-zinc-700">
+                      {doc.approvedByTitle}
                     </p>
                   )}
                 </div>
-                {isEditing ? (
-                  <input
-                    type="text"
-                    value={doc.approvedByTitle}
-                    onChange={(e) => setDoc({ ...doc, approvedByTitle: e.target.value })}
-                    className="w-full text-center font-bold text-xs uppercase border border-zinc-300 rounded p-1"
-                    placeholder="TITLE (e.g. SK Chairperson)"
-                  />
-                ) : (
-                  <p className="text-xs font-bold uppercase tracking-widest text-zinc-700">
-                    {doc.approvedByTitle}
-                  </p>
-                )}
+
               </div>
 
-            </div>
-
-            {/* Document metadata footer in print */}
-            <div className="pt-8 text-center text-[9px] font-bold uppercase tracking-widest text-zinc-400 border-t border-zinc-200">
-              Comprehensive Barangay Youth Development Plan (CBYDP) • Republic of the Philippines • Municipality of Laak, Davao de Oro
+              {/* Document metadata footer in print */}
+              <div className="pt-8 text-center text-[9px] font-bold uppercase tracking-widest text-zinc-400 border-t border-zinc-200 mt-6">
+                Comprehensive Barangay Youth Development Plan (CBYDP) • Republic of the Philippines • Municipality of {doc.municipality}, {doc.province}
+              </div>
             </div>
           </div>
 
