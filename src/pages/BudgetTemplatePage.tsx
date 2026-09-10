@@ -30,6 +30,7 @@ import {
 import html2canvas from "html2canvas-pro";
 import { jsPDF } from "jspdf";
 import { exportOfficialLandscapePdf } from "../lib/pdfExport";
+import { PrintPreviewModal } from "../components/PrintPreviewModal";
 import { useAuth } from "../components/auth/AuthProvider";
 import { 
   BudgetDocument, 
@@ -52,6 +53,71 @@ import {
   getBarangayRecords 
 } from "../lib/barangayStore";
 
+/**
+ * Greedily packs Annual Budget YDEP programs into landscape A4 sheets.
+ * Completely fills each page before overflowing to a continuation sheet.
+ */
+function paginateBudgetYdepPrograms(programs: BudgetYdepProgram[]): BudgetYdepProgram[][] {
+  if (!programs || programs.length === 0) return [[]];
+
+  const getProgramRowCount = (prog: BudgetYdepProgram): number => {
+    let count = 2; // Category Title row + Category Subtotal row
+    (prog.subcategories || []).forEach((sub) => {
+      if (sub.label) count += 1;
+      count += (sub.items || []).length;
+    });
+    return count;
+  };
+
+  const totalAllRows = programs.reduce((sum, p) => sum + getProgramRowCount(p), 0);
+
+  // If all programs together with Grand Totals (3 rows) and Signatures (~95px) fit on 1 single sheet:
+  const MAX_ROWS_SINGLE_SHEET_WITH_SIGS = 17;
+  if (totalAllRows <= MAX_ROWS_SINGLE_SHEET_WITH_SIGS) {
+    return [programs];
+  }
+
+  // Middle sheets (no signatures, no grand totals) can hold ~22 rows.
+  // Final sheet needs space for Grand Totals (3 rows) and Signatures (~95px), so ~16 rows.
+  const MAX_ROWS_MIDDLE_SHEET = 22;
+  const MAX_ROWS_FINAL_SHEET = 16;
+
+  const chunks: BudgetYdepProgram[][] = [];
+  let currentChunk: BudgetYdepProgram[] = [];
+  let currentRows = 0;
+
+  for (let i = 0; i < programs.length; i++) {
+    const prog = programs[i];
+    const pRows = getProgramRowCount(prog);
+
+    const remainingPrograms = programs.slice(i);
+    const remainingRows = remainingPrograms.reduce((sum, p) => sum + getProgramRowCount(p), 0);
+
+    // If all remaining programs (including this one) fit comfortably on the final sheet with signatures:
+    if (currentChunk.length > 0 && remainingRows <= MAX_ROWS_FINAL_SHEET) {
+      chunks.push(currentChunk);
+      currentChunk = [prog];
+      currentRows = pRows;
+      continue;
+    }
+
+    if (currentChunk.length > 0 && currentRows + pRows > MAX_ROWS_MIDDLE_SHEET) {
+      chunks.push(currentChunk);
+      currentChunk = [prog];
+      currentRows = pRows;
+    } else {
+      currentChunk.push(prog);
+      currentRows += pRows;
+    }
+  }
+
+  if (currentChunk.length > 0) {
+    chunks.push(currentChunk);
+  }
+
+  return chunks;
+}
+
 export function BudgetTemplatePage() {
   const navigate = useNavigate();
   const { role, user, activeBarangay } = useAuth();
@@ -67,6 +133,7 @@ export function BudgetTemplatePage() {
 
   // Edit / View mode toggle
   const [isEditing, setIsEditing] = useState<boolean>(false);
+  const [isPrintPreviewOpen, setIsPrintPreviewOpen] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<{ text: string; type: "success" | "error" | "info" } | null>(null);
 
   // AI Compliance state
@@ -577,9 +644,25 @@ export function BudgetTemplatePage() {
               <span>Save Progress</span>
             </button>
 
+            {/* Print Preview Button */}
+            <button
+              onClick={() => {
+                if (isEditing) setIsEditing(false);
+                setIsPrintPreviewOpen(true);
+              }}
+              className="px-3 py-2 rounded-xl text-xs font-black uppercase tracking-wider bg-slate-800 hover:bg-slate-700 text-amber-300 border border-amber-400/40 shadow-sm transition-all flex items-center gap-1.5 cursor-pointer"
+              title="Preview Annual Budget exactly as rendered on A4 paper"
+            >
+              <Eye className="w-3.5 h-3.5 text-amber-400" />
+              <span>Print Preview</span>
+            </button>
+
             {/* Native Print */}
             <button
-              onClick={() => window.print()}
+              onClick={() => {
+                if (isEditing) setIsEditing(false);
+                setTimeout(() => window.print(), 100);
+              }}
               className="p-2 text-zinc-700 hover:bg-zinc-100 rounded-xl border border-zinc-200 transition-colors cursor-pointer"
               title="Print Document"
             >
@@ -1085,386 +1168,413 @@ export function BudgetTemplatePage() {
           </div>
 
           <div className="pt-3 text-[9px] text-zinc-500 italic text-right print:text-zinc-600">
-            Page 1 of 2 — Office of the Sangguniang Kabataan Annual Budget (CY {doc.calendarYear})
+            Page 1 of {1 + paginateBudgetYdepPrograms(doc.ydepPrograms).length} — Office of the Sangguniang Kabataan Annual Budget (CY {doc.calendarYear})
           </div>
 
         </div>
 
 
         {/* ========================================================= */}
-        {/* PAGE 2: SK YDEP PROGRAMS & SIGNATURES                     */}
+        {/* PAGES 2+: SK YDEP PROGRAMS & SIGNATURES                   */}
+        {/* Paginated into clean Landscape A4 sheets to avoid cutoffs */}
         {/* ========================================================= */}
-        <div className="budget-page-break max-w-[1122px] mx-auto bg-white border border-zinc-300 shadow-xl rounded-2xl p-6 sm:px-8 sm:py-5 min-h-[760px] flex flex-col justify-between print:border-none print:shadow-none print:rounded-none print:p-0">
-          
-          <div>
-            {/* HEADER SECTION (Page 2 - Repeats exact official layout) */}
-            <div className="pb-4">
-              <div className="flex items-center justify-between gap-4">
-                
-                {/* Left Circular Emblem */}
-                <div className="w-20 h-20 rounded-full border-2 border-blue-900/80 bg-white p-1 flex items-center justify-center shadow-sm shrink-0 overflow-hidden">
-                  {doc.leftLogoUrl ? (
-                    <img src={doc.leftLogoUrl} alt="Barangay Seal" className="w-full h-full object-contain rounded-full" />
-                  ) : (
-                    <div className="w-full h-full rounded-full border border-amber-500 bg-amber-50 flex flex-col items-center justify-center text-center p-1 text-zinc-900">
-                      <span className="text-[7px] font-black uppercase text-blue-950 leading-tight">BARANGAY</span>
-                      <span className="text-[7.5px] font-black uppercase text-amber-700 leading-tight">{doc.barangayName.toUpperCase()}</span>
-                      <div className="text-emerald-700 font-black text-sm my-0.2">🌴</div>
-                      <span className="text-[6px] font-bold uppercase text-zinc-600 leading-none">LAAK, DAVAO DE ORO</span>
-                    </div>
-                  )}
-                </div>
+        {(() => {
+          const ydepChunks = paginateBudgetYdepPrograms(doc.ydepPrograms);
+          const totalPages = 1 + ydepChunks.length;
 
-                {/* Center Texts */}
-                <div className="text-center space-y-0.5 flex-1">
-                  <p className="text-[10px] font-semibold tracking-wider text-zinc-800 uppercase leading-tight">
-                    Republic of the Philippines
-                  </p>
-                  <p className="text-[10px] font-semibold tracking-wider text-zinc-800 uppercase leading-tight">
-                    Province of Davao de Oro
-                  </p>
-                  <p className="text-[10px] font-semibold tracking-wider text-zinc-800 uppercase leading-tight">
-                    Municipality of Laak
-                  </p>
-                  <p className="text-[11px] font-black tracking-wide text-zinc-950 uppercase pt-0.5 leading-tight">
-                    Barangay {doc.barangayName.toUpperCase()}
-                  </p>
-                  <h2 className="text-xs font-black tracking-wider text-zinc-950 uppercase pt-0.5 leading-tight">
-                    OFFICE OF THE SANGGUNIANG KABATAAN
-                  </h2>
-                  <h3 className="text-[11px] font-black tracking-widest text-zinc-900 uppercase leading-tight">
-                    CALENDAR YEAR {doc.calendarYear}
-                  </h3>
-                </div>
+          return ydepChunks.map((chunk, chunkIdx) => {
+            const isFirstYdepSheet = chunkIdx === 0;
+            const isLastYdepSheet = chunkIdx === ydepChunks.length - 1;
+            const pageNumber = chunkIdx + 2;
 
-                {/* Right Circular Emblem */}
-                <div className="w-20 h-20 rounded-full border-2 border-amber-500/80 bg-white p-1 flex items-center justify-center shadow-sm shrink-0 overflow-hidden">
-                  {doc.rightLogoUrl ? (
-                    <img src={doc.rightLogoUrl} alt="SK Emblem" className="w-full h-full object-contain rounded-full" />
-                  ) : (
-                    <div className="w-full h-full rounded-full border border-blue-900 bg-blue-950 flex flex-col items-center justify-center text-white text-center p-1 relative overflow-hidden">
-                      <span className="text-[7px] font-black tracking-tighter uppercase text-amber-300 leading-tight">
-                        SANGGUNIANG KABATAAN
-                      </span>
-                      <div className="text-amber-400 font-black text-base leading-none my-0.2">★</div>
-                      <span className="text-[6px] font-bold uppercase tracking-wider text-slate-200 leading-none">
-                        BARANGAY {doc.barangayName.toUpperCase()}
-                      </span>
-                    </div>
-                  )}
-                </div>
-
-              </div>
-            </div>
-
-            {/* PAGE 2 TABLE */}
-            <table className="w-full border-collapse border border-black text-[9.5px] leading-tight text-black table-fixed">
-              <colgroup>
-                <col style={{ width: "44%" }} />
-                <col style={{ width: "22%" }} />
-                <col style={{ width: "17%" }} />
-                <col style={{ width: "17%" }} />
-              </colgroup>
-              
-              <thead>
-                <tr className="border-b border-black font-black uppercase text-center bg-white">
-                  <th className="p-2 border-r border-black font-black">OBJECT OF EXPENDITURES</th>
-                  <th className="p-2 border-r border-black font-black">BUDGET YEAR EXPENDITURES</th>
-                  <th className="p-2 border-r border-black font-black">EXPECTED RESULTS</th>
-                  <th className="p-2 font-black">PERFORMANCE INDICATOR</th>
-                </tr>
-              </thead>
-
-              <tbody>
-                {/* SK YOUTH DEVELOPMENT AND EMPOWERMENT PROGRAMS Header */}
-                <tr className="border-b border-black font-black uppercase bg-zinc-50/60">
-                  <td className="p-1.5 border-r border-black">
-                    SK YOUTH DEVELOPMENT AND EMPOWERMENT PROGRAMS
-                  </td>
-                  <td className="p-1.5 border-r border-black"></td>
-                  <td className="p-1.5 border-r border-black"></td>
-                  <td className="p-1.5"></td>
-                </tr>
-
-                {/* YDEP CATEGORIES LIST (HEALTH, GOVERNANCE, ACTIVE CITIZENSHIP, EDUCATION, ENVIRONMENT, etc.) */}
-                {doc.ydepPrograms.map((prog) => {
-                  const progTotal = calc.ydepSubtotals[prog.id] || 0;
-                  // Calculate total rows for this category
-                  const totalSubRows = prog.subcategories.reduce(
-                    (acc, sub) => acc + (sub.label ? 1 : 0) + sub.items.length,
-                    0
-                  );
-                  const categoryTotalRowSpan = 1 + totalSubRows + 1; // Category Title + all sub rows + Category Total
-
-                  return (
-                    <React.Fragment key={prog.id}>
-                      {/* Row 1: Category Name & Spanning Results/Indicators */}
-                      <tr className="border-b border-black">
-                        <td className="p-1 font-black uppercase border-r border-black pl-2">
-                          <div className="flex items-center justify-between">
-                            <span>{prog.name}</span>
-                            {isEditing && (
-                              <button
-                                onClick={() => handleAddYdepSubcategory(prog.id)}
-                                className="text-[7px] font-bold text-blue-700 hover:underline flex items-center gap-0.5 print:hidden cursor-pointer"
-                              >
-                                <Plus className="w-1.5 h-1.5" /> Add Sub-PPA
-                              </button>
-                            )}
+            return (
+              <div 
+                key={`budget-ydep-sheet-${chunkIdx + 1}`}
+                id={`budget-page-${pageNumber}`}
+                className="budget-page-break max-w-[1122px] mx-auto bg-white border border-zinc-300 shadow-xl rounded-2xl p-6 sm:px-8 sm:py-5 min-h-[760px] flex flex-col justify-between print:border-none print:shadow-none print:rounded-none print:p-0"
+              >
+                <div>
+                  {/* HEADER SECTION (Repeats official layout on each sheet) */}
+                  <div className="pb-4">
+                    <div className="flex items-center justify-between gap-4">
+                      
+                      {/* Left Circular Emblem */}
+                      <div className="w-20 h-20 rounded-full border-2 border-blue-900/80 bg-white p-1 flex items-center justify-center shadow-sm shrink-0 overflow-hidden">
+                        {doc.leftLogoUrl ? (
+                          <img src={doc.leftLogoUrl} alt="Barangay Seal" className="w-full h-full object-contain rounded-full" />
+                        ) : (
+                          <div className="w-full h-full rounded-full border border-amber-500 bg-amber-50 flex flex-col items-center justify-center text-center p-1 text-zinc-900">
+                            <span className="text-[7px] font-black uppercase text-blue-950 leading-tight">BARANGAY</span>
+                            <span className="text-[7.5px] font-black uppercase text-amber-700 leading-tight">{doc.barangayName.toUpperCase()}</span>
+                            <div className="text-emerald-700 font-black text-sm my-0.2">🌴</div>
+                            <span className="text-[6px] font-bold uppercase text-zinc-600 leading-none">LAAK, DAVAO DE ORO</span>
                           </div>
-                        </td>
-                        <td className="p-1 border-r border-black"></td>
+                        )}
+                      </div>
 
-                        {/* Spanning Expected Results for this Category */}
-                        <td rowSpan={categoryTotalRowSpan} className="p-1.5 border-r border-black text-center align-middle">
-                          {isEditing ? (
-                            <textarea
-                              rows={2}
-                              value={prog.expectedResults}
-                              onChange={(e) => setDoc({
-                                ...doc,
-                                ydepPrograms: doc.ydepPrograms.map(p => p.id === prog.id ? { ...p, expectedResults: e.target.value } : p)
-                              })}
-                              className="w-full text-center border p-1 text-[8px] rounded resize-none"
-                            />
-                          ) : (
-                            <span className="text-[8.5px] leading-tight block">{prog.expectedResults}</span>
-                          )}
-                        </td>
+                      {/* Center Texts */}
+                      <div className="text-center space-y-0.5 flex-1">
+                        <p className="text-[10px] font-semibold tracking-wider text-zinc-800 uppercase leading-tight">
+                          Republic of the Philippines
+                        </p>
+                        <p className="text-[10px] font-semibold tracking-wider text-zinc-800 uppercase leading-tight">
+                          Province of Davao de Oro
+                        </p>
+                        <p className="text-[10px] font-semibold tracking-wider text-zinc-800 uppercase leading-tight">
+                          Municipality of Laak
+                        </p>
+                        <p className="text-[11px] font-black tracking-wide text-zinc-950 uppercase pt-0.5 leading-tight">
+                          Barangay {doc.barangayName.toUpperCase()}
+                        </p>
+                        <h2 className="text-xs font-black tracking-wider text-zinc-950 uppercase pt-0.5 leading-tight">
+                          OFFICE OF THE SANGGUNIANG KABATAAN
+                        </h2>
+                        <h3 className="text-[11px] font-black tracking-widest text-zinc-900 uppercase leading-tight">
+                          CALENDAR YEAR {doc.calendarYear} {!isFirstYdepSheet && "(CONTINUATION)"}
+                        </h3>
+                      </div>
 
-                        {/* Spanning Performance Indicator for this Category */}
-                        <td rowSpan={categoryTotalRowSpan} className="p-1.5 text-center align-middle">
-                          {isEditing ? (
-                            <textarea
-                              rows={2}
-                              value={prog.performanceIndicator}
-                              onChange={(e) => setDoc({
-                                ...doc,
-                                ydepPrograms: doc.ydepPrograms.map(p => p.id === prog.id ? { ...p, performanceIndicator: e.target.value } : p)
-                              })}
-                              className="w-full text-center border p-1 text-[8px] rounded resize-none"
-                            />
-                          ) : (
-                            <span className="text-[8.5px] leading-tight block">{prog.performanceIndicator}</span>
-                          )}
+                      {/* Right Circular Emblem */}
+                      <div className="w-20 h-20 rounded-full border-2 border-amber-500/80 bg-white p-1 flex items-center justify-center shadow-sm shrink-0 overflow-hidden">
+                        {doc.rightLogoUrl ? (
+                          <img src={doc.rightLogoUrl} alt="SK Emblem" className="w-full h-full object-contain rounded-full" />
+                        ) : (
+                          <div className="w-full h-full rounded-full border border-blue-900 bg-blue-950 flex flex-col items-center justify-center text-white text-center p-1 relative overflow-hidden">
+                            <span className="text-[7px] font-black tracking-tighter uppercase text-amber-300 leading-tight">
+                              SANGGUNIANG KABATAAN
+                            </span>
+                            <div className="text-amber-400 font-black text-base leading-none my-0.2">★</div>
+                            <span className="text-[6px] font-bold uppercase tracking-wider text-slate-200 leading-none">
+                              BARANGAY {doc.barangayName.toUpperCase()}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+
+                    </div>
+                  </div>
+
+                  {/* YDEP TABLE */}
+                  <table className="w-full border-collapse border border-black text-[9.5px] leading-tight text-black table-fixed">
+                    <colgroup>
+                      <col style={{ width: "44%" }} />
+                      <col style={{ width: "22%" }} />
+                      <col style={{ width: "17%" }} />
+                      <col style={{ width: "17%" }} />
+                    </colgroup>
+                    
+                    <thead>
+                      <tr className="border-b border-black font-black uppercase text-center bg-white">
+                        <th className="p-2 border-r border-black font-black">OBJECT OF EXPENDITURES</th>
+                        <th className="p-2 border-r border-black font-black">BUDGET YEAR EXPENDITURES</th>
+                        <th className="p-2 border-r border-black font-black">EXPECTED RESULTS</th>
+                        <th className="p-2 font-black">PERFORMANCE INDICATOR</th>
+                      </tr>
+                    </thead>
+
+                    <tbody>
+                      {/* SK YOUTH DEVELOPMENT AND EMPOWERMENT PROGRAMS Header */}
+                      <tr className="border-b border-black font-black uppercase bg-zinc-50/60">
+                        <td className="p-1.5 border-r border-black">
+                          SK YOUTH DEVELOPMENT AND EMPOWERMENT PROGRAMS {!isFirstYdepSheet && "(CONTINUATION)"}
                         </td>
+                        <td className="p-1.5 border-r border-black"></td>
+                        <td className="p-1.5 border-r border-black"></td>
+                        <td className="p-1.5"></td>
                       </tr>
 
-                      {/* Subcategories & Items */}
-                      {prog.subcategories.map((sub) => (
-                        <React.Fragment key={sub.id}>
-                          {/* Subcategory Label if present */}
-                          {sub.label && (
-                            <tr className="border-b border-black/40">
-                              <td className="p-0.5 font-bold uppercase border-r border-black pl-4 text-[9px]">
-                                <div className="flex items-center justify-between">
-                                  {isEditing ? (
-                                    <input
-                                      type="text"
-                                      value={sub.label}
-                                      onChange={(e) => {
-                                        const val = e.target.value;
-                                        setDoc(prev => ({
-                                          ...prev,
-                                          ydepPrograms: prev.ydepPrograms.map(p => {
-                                            if (p.id !== prog.id) return p;
-                                            return {
-                                              ...p,
-                                              subcategories: p.subcategories.map(s => s.id === sub.id ? { ...s, label: val } : s)
-                                            };
-                                          })
-                                        }));
-                                      }}
-                                      className="w-full border-b border-zinc-300 py-0.5 text-[9px] font-bold focus:outline-none"
-                                    />
-                                  ) : (
-                                    <span>{sub.label}</span>
-                                  )}
-                                  {isEditing && (
-                                    <button
-                                      onClick={() => handleAddYdepItem(prog.id, sub.id)}
-                                      className="text-[7px] font-bold text-emerald-700 hover:underline flex items-center gap-0.5 print:hidden ml-2 cursor-pointer shrink-0"
-                                    >
-                                      <Plus className="w-1.5 h-1.5" /> Add Item
-                                    </button>
-                                  )}
-                                </div>
-                              </td>
-                              <td className="p-0.5 border-r border-black"></td>
-                            </tr>
-                          )}
+                      {/* YDEP CATEGORIES IN THIS CHUNK */}
+                      {chunk.map((prog) => {
+                        const progTotal = calc.ydepSubtotals[prog.id] || 0;
+                        const totalSubRows = prog.subcategories.reduce(
+                          (acc, sub) => acc + (sub.label ? 1 : 0) + sub.items.length,
+                          0
+                        );
+                        const categoryTotalRowSpan = 1 + totalSubRows + 1;
 
-                          {/* Items */}
-                          {sub.items.map((item) => (
-                            <tr key={item.id} className="border-b border-black/30">
-                              <td className="p-0.5 border-r border-black pl-6">
+                        return (
+                          <React.Fragment key={prog.id}>
+                            {/* Row 1: Category Name & Spanning Results/Indicators */}
+                            <tr className="border-b border-black">
+                              <td className="p-1 font-black uppercase border-r border-black pl-2">
                                 <div className="flex items-center justify-between">
-                                  {isEditing ? (
-                                    <input
-                                      type="text"
-                                      value={item.name}
-                                      onChange={(e) => handleYdepItemChange(prog.id, sub.id, item.id, "name", e.target.value)}
-                                      className="w-full border-b border-zinc-300 py-0.5 text-[9px] focus:outline-none"
-                                    />
-                                  ) : (
-                                    <span>{item.name.startsWith("•") || item.name.startsWith("*") ? item.name : `• ${item.name}`}</span>
-                                  )}
+                                  <span>{prog.name}</span>
                                   {isEditing && (
                                     <button
-                                      onClick={() => handleDeleteYdepItem(prog.id, sub.id, item.id)}
-                                      className="text-rose-500 hover:text-rose-700 ml-2 print:hidden cursor-pointer"
+                                      onClick={() => handleAddYdepSubcategory(prog.id)}
+                                      className="text-[7px] font-bold text-blue-700 hover:underline flex items-center gap-0.5 print:hidden cursor-pointer"
                                     >
-                                      <Trash2 className="w-2 h-2" />
+                                      <Plus className="w-1.5 h-1.5" /> Add Sub-PPA
                                     </button>
                                   )}
                                 </div>
                               </td>
-                              <td className="p-0.5 border-r border-black text-center font-medium">
+                              <td className="p-1 border-r border-black"></td>
+
+                              {/* Spanning Expected Results for this Category */}
+                              <td rowSpan={categoryTotalRowSpan} className="p-1.5 border-r border-black text-center align-middle">
                                 {isEditing ? (
-                                  <input
-                                    type="number"
-                                    step="0.01"
-                                    value={item.amount}
-                                    onChange={(e) => handleYdepItemChange(prog.id, sub.id, item.id, "amount", e.target.value)}
-                                    className="w-24 text-center border-b border-zinc-300 text-[9px] font-bold py-0.5"
+                                  <textarea
+                                    rows={2}
+                                    value={prog.expectedResults}
+                                    onChange={(e) => setDoc({
+                                      ...doc,
+                                      ydepPrograms: doc.ydepPrograms.map(p => p.id === prog.id ? { ...p, expectedResults: e.target.value } : p)
+                                    })}
+                                    className="w-full text-center border p-1 text-[8px] rounded resize-none"
                                   />
                                 ) : (
-                                  formatCurrency(item.amount)
+                                  <span className="text-[8.5px] leading-tight block">{prog.expectedResults}</span>
+                                )}
+                              </td>
+
+                              {/* Spanning Performance Indicator for this Category */}
+                              <td rowSpan={categoryTotalRowSpan} className="p-1.5 text-center align-middle">
+                                {isEditing ? (
+                                  <textarea
+                                    rows={2}
+                                    value={prog.performanceIndicator}
+                                    onChange={(e) => setDoc({
+                                      ...doc,
+                                      ydepPrograms: doc.ydepPrograms.map(p => p.id === prog.id ? { ...p, performanceIndicator: e.target.value } : p)
+                                    })}
+                                    className="w-full text-center border p-1 text-[8px] rounded resize-none"
+                                  />
+                                ) : (
+                                  <span className="text-[8.5px] leading-tight block">{prog.performanceIndicator}</span>
                                 )}
                               </td>
                             </tr>
-                          ))}
-                        </React.Fragment>
-                      ))}
 
-                      {/* Program Category Total */}
-                      <tr className="border-b border-black font-bold bg-zinc-50/30">
-                        <td className="p-1 uppercase border-r border-black pl-4">
-                          TOTAL {prog.name === "ACTIVE CITIZENSHIP" ? "ACTIVE CITIZENSHIP" : prog.name === "GOVERNANCE" ? "GOVERNANCE" : `FOR ${prog.name}`}
-                        </td>
-                        <td className="p-1 border-r border-black text-center font-bold">
-                          {formatCurrency(progTotal)}
-                        </td>
-                      </tr>
-                    </React.Fragment>
-                  );
-                })}
+                            {/* Subcategories & Items */}
+                            {prog.subcategories.map((sub) => (
+                              <React.Fragment key={sub.id}>
+                                {sub.label && (
+                                  <tr className="border-b border-black/40">
+                                    <td className="p-0.5 font-bold uppercase border-r border-black pl-4 text-[9px]">
+                                      <div className="flex items-center justify-between">
+                                        {isEditing ? (
+                                          <input
+                                            type="text"
+                                            value={sub.label}
+                                            onChange={(e) => {
+                                              const val = e.target.value;
+                                              setDoc(prev => ({
+                                                ...prev,
+                                                ydepPrograms: prev.ydepPrograms.map(p => {
+                                                  if (p.id !== prog.id) return p;
+                                                  return {
+                                                    ...p,
+                                                    subcategories: p.subcategories.map(s => s.id === sub.id ? { ...s, label: val } : s)
+                                                  };
+                                                })
+                                              }));
+                                            }}
+                                            className="w-full border-b border-zinc-300 py-0.5 text-[9px] font-bold focus:outline-none"
+                                          />
+                                        ) : (
+                                          <span>{sub.label}</span>
+                                        )}
+                                        {isEditing && (
+                                          <button
+                                            onClick={() => handleAddYdepItem(prog.id, sub.id)}
+                                            className="text-[7px] font-bold text-emerald-700 hover:underline flex items-center gap-0.5 print:hidden ml-2 cursor-pointer shrink-0"
+                                          >
+                                            <Plus className="w-1.5 h-1.5" /> Add Item
+                                          </button>
+                                        )}
+                                      </div>
+                                    </td>
+                                    <td className="p-0.5 border-r border-black"></td>
+                                  </tr>
+                                )}
 
-                {/* TOTAL SANGGUNIANG KABATAAN YOUTH DEVELOPMENT AND EMPOWERMENT PROGRAMS, PLANS, AND ACTIVITIES (SK YDEP) */}
-                <tr className="border-b border-black font-black uppercase bg-zinc-50">
-                  <td className="p-1.5 border-r border-black">
-                    TOTAL SANGGUNIANG KABATAAN YOUTH DEVELOPMENT AND EMPOWERMENT PROGRAMS, PLANS, AND ACTIVITIES (SK YDEP)
-                  </td>
-                  <td className="p-1.5 border-r border-black text-center">
-                    {formatCurrency(calc.totalYDEP)}
-                  </td>
-                  <td className="p-1.5 border-r border-black"></td>
-                  <td className="p-1.5"></td>
-                </tr>
+                                {sub.items.map((item) => (
+                                  <tr key={item.id} className="border-b border-black/30">
+                                    <td className="p-0.5 border-r border-black pl-6">
+                                      <div className="flex items-center justify-between">
+                                        {isEditing ? (
+                                          <input
+                                            type="text"
+                                            value={item.name}
+                                            onChange={(e) => handleYdepItemChange(prog.id, sub.id, item.id, "name", e.target.value)}
+                                            className="w-full border-b border-zinc-300 py-0.5 text-[9px] focus:outline-none"
+                                          />
+                                        ) : (
+                                          <span>{item.name.startsWith("•") || item.name.startsWith("*") ? item.name : `• ${item.name}`}</span>
+                                        )}
+                                        {isEditing && (
+                                          <button
+                                            onClick={() => handleDeleteYdepItem(prog.id, sub.id, item.id)}
+                                            className="text-rose-500 hover:text-rose-700 ml-2 print:hidden cursor-pointer"
+                                          >
+                                            <Trash2 className="w-2 h-2" />
+                                          </button>
+                                        )}
+                                      </div>
+                                    </td>
+                                    <td className="p-0.5 border-r border-black text-center font-medium">
+                                      {isEditing ? (
+                                        <input
+                                          type="number"
+                                          step="0.01"
+                                          value={item.amount}
+                                          onChange={(e) => handleYdepItemChange(prog.id, sub.id, item.id, "amount", e.target.value)}
+                                          className="w-24 text-center border-b border-zinc-300 text-[9px] font-bold py-0.5"
+                                        />
+                                      ) : (
+                                        formatCurrency(item.amount)
+                                      )}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </React.Fragment>
+                            ))}
 
-                {/* TOTAL EXPENDITURE PROGRAM */}
-                <tr className="border-b border-black font-black uppercase bg-zinc-100/70">
-                  <td className="p-1.5 border-r border-black">
-                    TOTAL EXPENDITURE PROGRAM
-                  </td>
-                  <td className="p-1.5 border-r border-black text-center">
-                    {formatCurrency(calc.totalExpenditures)}
-                  </td>
-                  <td className="p-1.5 border-r border-black"></td>
-                  <td className="p-1.5"></td>
-                </tr>
+                            {/* Program Category Total */}
+                            <tr className="border-b border-black font-bold bg-zinc-50/30">
+                              <td className="p-1 uppercase border-r border-black pl-4">
+                                TOTAL {prog.name === "ACTIVE CITIZENSHIP" ? "ACTIVE CITIZENSHIP" : prog.name === "GOVERNANCE" ? "GOVERNANCE" : `FOR ${prog.name}`}
+                              </td>
+                              <td className="p-1 border-r border-black text-center font-bold">
+                                {formatCurrency(progTotal)}
+                              </td>
+                            </tr>
+                          </React.Fragment>
+                        );
+                      })}
 
-                {/* PART IV. ENDING BALANCE */}
-                <tr className="border-b border-black font-black uppercase bg-white">
-                  <td className="p-1.5 border-r border-black">
-                    PART IV. ENDING BALANCE
-                  </td>
-                  <td className="p-1.5 border-r border-black text-center">
-                    {calc.endingBalance === 0 ? "₱  -" : formatCurrency(calc.endingBalance)}
-                  </td>
-                  <td className="p-1.5 border-r border-black"></td>
-                  <td className="p-1.5"></td>
-                </tr>
+                      {/* If LAST sheet, render Grand Totals & Ending Balance */}
+                      {isLastYdepSheet ? (
+                        <>
+                          {/* TOTAL SK YDEP */}
+                          <tr className="border-b border-black font-black uppercase bg-zinc-50">
+                            <td className="p-1.5 border-r border-black">
+                              TOTAL SANGGUNIANG KABATAAN YOUTH DEVELOPMENT AND EMPOWERMENT PROGRAMS, PLANS, AND ACTIVITIES (SK YDEP)
+                            </td>
+                            <td className="p-1.5 border-r border-black text-center">
+                              {formatCurrency(calc.totalYDEP)}
+                            </td>
+                            <td className="p-1.5 border-r border-black"></td>
+                            <td className="p-1.5"></td>
+                          </tr>
 
-              </tbody>
-            </table>
+                          {/* TOTAL EXPENDITURE PROGRAM */}
+                          <tr className="border-b border-black font-black uppercase bg-zinc-100/70">
+                            <td className="p-1.5 border-r border-black">
+                              TOTAL EXPENDITURE PROGRAM
+                            </td>
+                            <td className="p-1.5 border-r border-black text-center">
+                              {formatCurrency(calc.totalExpenditures)}
+                            </td>
+                            <td className="p-1.5 border-r border-black"></td>
+                            <td className="p-1.5"></td>
+                          </tr>
 
-            {/* SIGNATURES SECTION */}
-            <div className="p-3 pt-4 grid grid-cols-2 gap-8 text-center text-xs">
-              
-              {/* Prepared By (SK Treasurer) */}
-              <div className="flex flex-col items-center">
-                <span className="text-[9.5px] font-bold text-zinc-700 uppercase tracking-wider mb-6">
-                  Prepared By:
-                </span>
-                {isEditing ? (
-                  <div className="w-full max-w-[260px] space-y-1">
-                    <input
-                      type="text"
-                      value={doc.preparedByName}
-                      onChange={(e) => setDoc({ ...doc, preparedByName: e.target.value })}
-                      className="w-full text-center border-b border-black font-bold uppercase text-xs pb-0.5 focus:outline-none"
-                    />
-                    <input
-                      type="text"
-                      value={doc.preparedByTitle}
-                      onChange={(e) => setDoc({ ...doc, preparedByTitle: e.target.value })}
-                      className="w-full text-center text-[9.5px] font-bold text-zinc-600 uppercase focus:outline-none"
-                    />
-                  </div>
-                ) : (
-                  <div>
-                    <div className="font-bold text-zinc-950 uppercase tracking-wider border-b border-black pb-0.5 min-w-[220px]">
-                      {doc.preparedByName}
+                          {/* PART IV. ENDING BALANCE */}
+                          <tr className="border-b border-black font-black uppercase bg-white">
+                            <td className="p-1.5 border-r border-black">
+                              PART IV. ENDING BALANCE
+                            </td>
+                            <td className="p-1.5 border-r border-black text-center">
+                              {calc.endingBalance === 0 ? "₱  -" : formatCurrency(calc.endingBalance)}
+                            </td>
+                            <td className="p-1.5 border-r border-black"></td>
+                            <td className="p-1.5"></td>
+                          </tr>
+                        </>
+                      ) : (
+                        <tr className="border-b border-black font-bold text-zinc-700 bg-zinc-50/50">
+                          <td colSpan={4} className="p-1.5 text-right uppercase tracking-wider italic text-[9px]">
+                            Continued on next sheet [Page {pageNumber + 1} of {totalPages}] →
+                          </td>
+                        </tr>
+                      )}
+
+                    </tbody>
+                  </table>
+
+                  {/* SIGNATURES SECTION (Only on final sheet) */}
+                  {isLastYdepSheet && (
+                    <div className="p-3 pt-4 grid grid-cols-2 gap-8 text-center text-xs">
+                      
+                      {/* Prepared By (SK Treasurer) */}
+                      <div className="flex flex-col items-center">
+                        <span className="text-[9.5px] font-bold text-zinc-700 uppercase tracking-wider mb-6">
+                          Prepared By:
+                        </span>
+                        {isEditing ? (
+                          <div className="w-full max-w-[260px] space-y-1">
+                            <input
+                              type="text"
+                              value={doc.preparedByName}
+                              onChange={(e) => setDoc({ ...doc, preparedByName: e.target.value })}
+                              className="w-full text-center border-b border-black font-bold uppercase text-xs pb-0.5 focus:outline-none"
+                            />
+                            <input
+                              type="text"
+                              value={doc.preparedByTitle}
+                              onChange={(e) => setDoc({ ...doc, preparedByTitle: e.target.value })}
+                              className="w-full text-center text-[9.5px] font-bold text-zinc-600 uppercase focus:outline-none"
+                            />
+                          </div>
+                        ) : (
+                          <div>
+                            <div className="font-bold text-zinc-950 uppercase tracking-wider border-b border-black pb-0.5 min-w-[220px]">
+                              {doc.preparedByName}
+                            </div>
+                            <div className="text-[9.5px] font-black uppercase text-zinc-600 mt-0.5">
+                              {doc.preparedByTitle}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* APPROVED BY (SK Chairperson) */}
+                      <div className="flex flex-col items-center">
+                        <span className="text-[9.5px] font-bold text-zinc-700 uppercase tracking-wider mb-6">
+                          APPROVED BY:
+                        </span>
+                        {isEditing ? (
+                          <div className="w-full max-w-[260px] space-y-1">
+                            <input
+                              type="text"
+                              value={doc.approvedByName}
+                              onChange={(e) => setDoc({ ...doc, approvedByName: e.target.value })}
+                              className="w-full text-center border-b border-black font-bold uppercase text-xs pb-0.5 focus:outline-none"
+                            />
+                            <input
+                              type="text"
+                              value={doc.approvedByTitle}
+                              onChange={(e) => setDoc({ ...doc, approvedByTitle: e.target.value })}
+                              className="w-full text-center text-[9.5px] font-bold text-zinc-600 uppercase focus:outline-none"
+                            />
+                          </div>
+                        ) : (
+                          <div>
+                            <div className="font-bold text-zinc-950 uppercase tracking-wider border-b border-black pb-0.5 min-w-[220px]">
+                              {doc.approvedByName}
+                            </div>
+                            <div className="text-[9.5px] font-black uppercase text-zinc-600 mt-0.5">
+                              {doc.approvedByTitle}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
                     </div>
-                    <div className="text-[9.5px] font-black uppercase text-zinc-600 mt-0.5">
-                      {doc.preparedByTitle}
-                    </div>
-                  </div>
-                )}
+                  )}
+
+                </div>
+
+                <div className="pt-3 text-[9px] text-zinc-500 italic text-right print:text-zinc-600">
+                  Page {pageNumber} of {totalPages} — Office of the Sangguniang Kabataan Annual Budget (CY {doc.calendarYear})
+                </div>
+
               </div>
-
-              {/* APPROVED BY (SK Chairperson) */}
-              <div className="flex flex-col items-center">
-                <span className="text-[9.5px] font-bold text-zinc-700 uppercase tracking-wider mb-6">
-                  APPROVED BY:
-                </span>
-                {isEditing ? (
-                  <div className="w-full max-w-[260px] space-y-1">
-                    <input
-                      type="text"
-                      value={doc.approvedByName}
-                      onChange={(e) => setDoc({ ...doc, approvedByName: e.target.value })}
-                      className="w-full text-center border-b border-black font-bold uppercase text-xs pb-0.5 focus:outline-none"
-                    />
-                    <input
-                      type="text"
-                      value={doc.approvedByTitle}
-                      onChange={(e) => setDoc({ ...doc, approvedByTitle: e.target.value })}
-                      className="w-full text-center text-[9.5px] font-bold text-zinc-600 uppercase focus:outline-none"
-                    />
-                  </div>
-                ) : (
-                  <div>
-                    <div className="font-bold text-zinc-950 uppercase tracking-wider border-b border-black pb-0.5 min-w-[220px]">
-                      {doc.approvedByName}
-                    </div>
-                    <div className="text-[9.5px] font-black uppercase text-zinc-600 mt-0.5">
-                      {doc.approvedByTitle}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-            </div>
-
-          </div>
-
-          <div className="pt-3 text-[9px] text-zinc-500 italic text-right print:text-zinc-600">
-            Page 2 of 2 — Office of the Sangguniang Kabataan Annual Budget (CY {doc.calendarYear})
-          </div>
-
-        </div>
+            );
+          });
+        })()}
 
       </div>
 
@@ -1708,6 +1818,18 @@ export function BudgetTemplatePage() {
           }
         }
       `}</style>
+
+      {/* Print Preview Modal */}
+      <PrintPreviewModal
+        isOpen={isPrintPreviewOpen}
+        onClose={() => setIsPrintPreviewOpen(false)}
+        title={`Annual Budget CY ${doc.calendarYear} - Barangay ${doc.barangayName}`}
+        subtitle="Sangguniang Kabataan Annual Budget Document"
+        documentType="Annual Budget"
+        pageElementsSelector=".budget-page-break"
+        onExportPdf={handleExportPdf}
+        isExportingPdf={isExportingPdf}
+      />
 
     </div>
   );

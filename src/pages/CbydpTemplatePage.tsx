@@ -28,6 +28,7 @@ import { useNavigate, Link } from "react-router-dom";
 import html2canvas from "html2canvas-pro";
 import { jsPDF } from "jspdf";
 import { exportOfficialLandscapePdf } from "../lib/pdfExport";
+import { PrintPreviewModal } from "../components/PrintPreviewModal";
 import { useAuth } from "../components/auth/AuthProvider";
 import { 
   CbydpDocument, 
@@ -42,6 +43,75 @@ import {
   calculateCbydpGrandTotal
 } from "../lib/cbydpStore";
 import { MUNICIPAL_BARANGAYS_40 } from "../lib/barangayStore";
+
+/**
+ * Estimates the rendered pixel height of a CBYDP row on A4 Landscape.
+ * Dynamically accounts for multi-line text wrapping across all columns.
+ */
+function estimateCbydpRowHeight(item: CbydpRowItem): number {
+  const charsConcern = item.concern?.length || 0;
+  const charsObjectives = item.objectives?.length || 0;
+  const charsIndicator = item.performanceIndicator?.length || 0;
+  const charsPpas = item.ppas?.length || 0;
+  const charsPerson = item.personResponsible?.length || 0;
+
+  // Approx characters per line based on column widths in landscape A4 table:
+  const linesConcern = Math.ceil(charsConcern / 24);
+  const linesObjectives = Math.ceil(charsObjectives / 22);
+  const linesIndicator = Math.ceil(charsIndicator / 24);
+  const linesPpas = Math.ceil(charsPpas / 28);
+  const linesPerson = Math.ceil(charsPerson / 20);
+
+  const maxLines = Math.max(1, linesConcern, linesObjectives, linesIndicator, linesPpas, linesPerson);
+  // Base height: 13px per line + 16px cell padding + borders
+  return Math.max(46, Math.min(180, maxLines * 13 + 16));
+}
+
+/**
+ * Greedily packs CBYDP items into sheets to completely fill each Landscape A4 page
+ * before breaking to a new sheet. Avoids premature page divides and huge blank gaps.
+ */
+function paginateCbydpSection(section: CbydpCenterSection): CbydpRowItem[][] {
+  const items = section.items || [];
+  if (items.length === 0) return [[]];
+
+  // Agenda statement adds vertical height to Sheet 1
+  const agendaLength = section.agendaStatement?.length || 0;
+  const agendaExtraLines = Math.max(0, Math.ceil(agendaLength / 110) - 1);
+  const sheet1Capacity = Math.max(380, 520 - agendaExtraLines * 15);
+  const continuationCapacity = 560;
+
+  const chunks: CbydpRowItem[][] = [];
+  let currentChunk: CbydpRowItem[] = [];
+  let currentHeight = 0;
+  let isFirstSheet = true;
+
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    const rowHeight = estimateCbydpRowHeight(item);
+    const capacity = isFirstSheet ? sheet1Capacity : continuationCapacity;
+
+    // Reserve 35px for subtotal row or continuation notice at bottom
+    const reservedBottom = 35;
+
+    // If adding this item would exceed sheet capacity, and we already have items on this sheet:
+    if (currentChunk.length > 0 && currentHeight + rowHeight + reservedBottom > capacity) {
+      chunks.push(currentChunk);
+      currentChunk = [item];
+      currentHeight = rowHeight;
+      isFirstSheet = false;
+    } else {
+      currentChunk.push(item);
+      currentHeight += rowHeight;
+    }
+  }
+
+  if (currentChunk.length > 0) {
+    chunks.push(currentChunk);
+  }
+
+  return chunks;
+}
 
 export function CbydpTemplatePage() {
   const { user, role, activeBarangay } = useAuth();
@@ -58,6 +128,7 @@ export function CbydpTemplatePage() {
 
   // View & Edit Mode state
   const [isEditing, setIsEditing] = useState<boolean>(false);
+  const [isPrintPreviewOpen, setIsPrintPreviewOpen] = useState<boolean>(false);
   const [activeCenterId, setActiveCenterId] = useState<string>(doc.sections[0]?.id || "sec-governance");
   const [toastMessage, setToastMessage] = useState<{ text: string; type: "success" | "error" | "info" } | null>(null);
 
@@ -480,9 +551,25 @@ export function CbydpTemplatePage() {
               )}
             </button>
 
+            {/* Print Preview Modal Button */}
+            <button
+              onClick={() => {
+                if (isEditing) setIsEditing(false);
+                setIsPrintPreviewOpen(true);
+              }}
+              className="px-3.5 py-2 rounded-xl bg-[#0F294A] hover:bg-[#153663] text-amber-300 border border-amber-400/40 text-xs font-black uppercase tracking-wider flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer shadow-sm"
+              title="Preview document exactly as rendered on A4 landscape paper"
+            >
+              <Eye className="w-3.5 h-3.5 text-amber-400" />
+              <span>Print Preview</span>
+            </button>
+
             {/* Print (Landscape) Button */}
             <button
-              onClick={() => window.print()}
+              onClick={() => {
+                if (isEditing) setIsEditing(false);
+                setTimeout(() => window.print(), 100);
+              }}
               className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-zinc-200 border border-slate-700 text-xs font-black uppercase tracking-wider flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer"
               title="Prints or saves via browser landscape dialog"
             >
@@ -792,216 +879,250 @@ export function CbydpTemplatePage() {
           <div className="space-y-8 print:space-y-0">
             {doc.sections.map((section, sIndex) => {
               const secTotal = calculateCbydpSectionTotal(section);
+              // Intelligently paginate items to completely fill each Landscape A4 page
+              const chunks = paginateCbydpSection(section);
 
-              return (
-                <div 
-                  key={section.id} 
-                  id={section.id} 
-                  className="cbydp-page-break bg-white text-zinc-900 border border-zinc-200 shadow-sm rounded-lg p-6 sm:p-8 print:border-none print:shadow-none print:rounded-none print:p-0 flex flex-col justify-between"
-                >
-                  <div className="space-y-4">
-                    {/* Center Header & Agenda Statement */}
-                    <div className="space-y-2 border-b-2 border-zinc-900 pb-2">
-                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
-                      <h2 className="text-base sm:text-lg font-black uppercase tracking-wide text-zinc-900">
-                        Center of Participation: <span className="text-blue-950 font-black">{section.centerName}</span>
-                      </h2>
+              return chunks.map((chunk, chunkIdx) => {
+                const isFirstSubpage = chunkIdx === 0;
+                const isLastSubpage = chunkIdx === chunks.length - 1;
+                const subpageId = isFirstSubpage ? section.id : `${section.id}-part-${chunkIdx + 1}`;
 
-                      {/* Edit controls for section header (Hidden in print) */}
-                      {isEditing && (
-                        <div className="flex items-center gap-2 print:hidden">
-                          <button
-                            onClick={() => handleOpenAddItem(section.id)}
-                            className="px-2.5 py-1 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-black uppercase flex items-center gap-1"
-                          >
-                            <Plus className="w-3 h-3" />
-                            <span>Add PPA Item</span>
-                          </button>
-                          <button
-                            onClick={() => handleDeleteCenter(section.id, section.centerName)}
-                            className="px-2.5 py-1 rounded bg-rose-50 hover:bg-rose-100 text-rose-700 text-[10px] font-black uppercase flex items-center gap-1 border border-rose-200"
-                            title="Delete Center"
-                          >
-                            <Trash2 className="w-3 h-3" />
-                            <span>Delete Center</span>
-                          </button>
-                        </div>
-                      )}
-                    </div>
+                return (
+                  <div 
+                    key={subpageId} 
+                    id={subpageId} 
+                    className="cbydp-page-break bg-white text-zinc-900 border border-zinc-200 shadow-sm rounded-lg p-6 sm:p-8 print:border-none print:shadow-none print:rounded-none print:p-0 flex flex-col justify-between"
+                  >
+                    <div className="space-y-4">
+                      {/* Center Header & Agenda Statement */}
+                      <div className="space-y-2 border-b-2 border-zinc-900 pb-2">
+                        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+                          <h2 className="text-base sm:text-lg font-black uppercase tracking-wide text-zinc-900">
+                            Center of Participation:{" "}
+                            <span className="text-blue-950 font-black">
+                              {section.centerName}
+                              {!isFirstSubpage && " (CONTINUATION)"}
+                            </span>
+                            {chunks.length > 1 && (
+                              <span className="ml-2 text-xs font-bold text-zinc-500 font-mono">
+                                [Sheet {chunkIdx + 1} of {chunks.length}]
+                              </span>
+                            )}
+                          </h2>
 
-                    {/* Agenda Statement */}
-                    <div className="text-xs font-normal text-zinc-800 leading-relaxed">
-                      <strong className="font-black text-zinc-950 mr-1.5">Agenda Statement:</strong>
-                      {isEditing ? (
-                        <textarea
-                          value={section.agendaStatement}
-                          onChange={(e) => {
-                            const updated = doc.sections.map(s => 
-                              s.id === section.id ? { ...s, agendaStatement: e.target.value } : s
-                            );
-                            setDoc({ ...doc, sections: updated });
-                          }}
-                          rows={2}
-                          className="w-full mt-1.5 p-2 text-xs border border-zinc-300 rounded focus:border-blue-900 focus:outline-none"
-                        />
-                      ) : (
-                        <span>{section.agendaStatement}</span>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Standard CBYDP 7-Column Table - Crisp border-separate prevents any header text clipping */}
-                  <div className="w-full pt-1">
-                    <table className="cbydp-table w-full border-separate border-spacing-0 border-t border-l border-zinc-900 text-[10px] leading-snug text-left">
-                      <colgroup>
-                        <col style={{ width: "16%" }} />
-                        <col style={{ width: "15%" }} />
-                        <col style={{ width: "16%" }} />
-                        <col style={{ width: "3.5%" }} />
-                        <col style={{ width: "3.5%" }} />
-                        <col style={{ width: "3.5%" }} />
-                        <col style={{ width: "18%" }} />
-                        <col style={{ width: "11.5%" }} />
-                        <col style={{ width: "13%" }} />
-                        {isEditing && <col style={{ width: "8%" }} className="print:hidden" />}
-                      </colgroup>
-                      <thead>
-                        <tr className="bg-zinc-100 text-zinc-900 font-black uppercase text-center">
-                          <th className="border-r border-b border-zinc-900 px-2 py-3.5 w-[16%] align-middle text-[9.5px] tracking-wide" rowSpan={2}>
-                            Youth Development Concern
-                          </th>
-                          <th className="border-r border-b border-zinc-900 px-2 py-3.5 w-[15%] align-middle text-[9.5px] tracking-wide" rowSpan={2}>
-                            Objectives
-                          </th>
-                          <th className="border-r border-b border-zinc-900 px-2 py-3.5 w-[16%] align-middle text-[9.5px] tracking-wide" rowSpan={2}>
-                            Performance Indicator
-                          </th>
-                          <th className="border-r border-b border-zinc-900 px-1 py-2 align-middle text-[9.5px] tracking-wide" colSpan={3}>
-                            Target
-                          </th>
-                          <th className="border-r border-b border-zinc-900 px-2 py-3.5 w-[18%] align-middle text-[9.5px] tracking-wide" rowSpan={2}>
-                            PPA'S
-                          </th>
-                          <th className="border-r border-b border-zinc-900 px-2 py-3.5 w-[11.5%] align-middle text-[9.5px] tracking-wide" rowSpan={2}>
-                            Budget
-                          </th>
-                          <th className="border-r border-b border-zinc-900 px-2 py-3.5 w-[13%] align-middle text-[9.5px] tracking-wide" rowSpan={2}>
-                            Person Responsible
-                          </th>
+                          {/* Edit controls for section header (Hidden in print) */}
                           {isEditing && (
-                            <th className="border-r border-b border-zinc-900 px-2 py-3.5 w-[8%] align-middle print:hidden text-[9.5px] tracking-wide" rowSpan={2}>
-                              Actions
-                            </th>
+                            <div className="flex items-center gap-2 print:hidden">
+                              <button
+                                onClick={() => handleOpenAddItem(section.id)}
+                                className="px-2.5 py-1 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-black uppercase flex items-center gap-1 cursor-pointer"
+                              >
+                                <Plus className="w-3 h-3" />
+                                <span>Add PPA Item</span>
+                              </button>
+                              {isFirstSubpage && (
+                                <button
+                                  onClick={() => handleDeleteCenter(section.id, section.centerName)}
+                                  className="px-2.5 py-1 rounded bg-rose-50 hover:bg-rose-100 text-rose-700 text-[10px] font-black uppercase flex items-center gap-1 border border-rose-200 cursor-pointer"
+                                  title="Delete Center"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                  <span>Delete Center</span>
+                                </button>
+                              )}
+                            </div>
                           )}
-                        </tr>
-                        <tr className="bg-zinc-100 text-zinc-900 font-extrabold uppercase text-center">
-                          <th className="border-r border-b border-zinc-900 px-1 py-1.5 w-[3.5%] text-[9px]">{doc.targetYearLabels[0] || "2026"}</th>
-                          <th className="border-r border-b border-zinc-900 px-1 py-1.5 w-[3.5%] text-[9px]">{doc.targetYearLabels[1] || "2027"}</th>
-                          <th className="border-r border-b border-zinc-900 px-1 py-1.5 w-[3.5%] text-[9px]">{doc.targetYearLabels[2] || "2028"}</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {section.items.length === 0 ? (
-                          <tr>
-                            <td colSpan={isEditing ? 10 : 9} className="border-r border-b border-zinc-900 p-6 text-center text-zinc-400 italic">
-                              No items recorded for this Center of Participation.
-                            </td>
-                          </tr>
+                        </div>
+
+                        {/* Agenda Statement (Shown on sheet 1; concise reminder on continuation) */}
+                        {isFirstSubpage ? (
+                          <div className="text-xs font-normal text-zinc-800 leading-relaxed">
+                            <strong className="font-black text-zinc-950 mr-1.5">Agenda Statement:</strong>
+                            {isEditing ? (
+                              <textarea
+                                value={section.agendaStatement}
+                                onChange={(e) => {
+                                  const updated = doc.sections.map(s => 
+                                    s.id === section.id ? { ...s, agendaStatement: e.target.value } : s
+                                  );
+                                  setDoc({ ...doc, sections: updated });
+                                }}
+                                rows={2}
+                                className="w-full mt-1.5 p-2 text-xs border border-zinc-300 rounded focus:border-blue-900 focus:outline-none"
+                              />
+                            ) : (
+                              <span>{section.agendaStatement}</span>
+                            )}
+                          </div>
                         ) : (
-                          section.items.map((item) => (
-                            <tr key={item.id} className="hover:bg-amber-50/20 transition-colors align-top">
-                              {/* Concern */}
-                              <td className="border-r border-b border-zinc-900 p-2 text-zinc-800 leading-snug">
-                                {item.concern}
-                              </td>
+                          <div className="text-[11px] text-zinc-500 italic flex items-center justify-between">
+                            <span>Continued Program Priorities, Performance Targets, and Budget Allocations</span>
+                            <span className="font-semibold text-zinc-700">CY {doc.calendarYears}</span>
+                          </div>
+                        )}
+                      </div>
 
-                              {/* Objectives */}
-                              <td className="border-r border-b border-zinc-900 p-2 text-zinc-800 leading-snug">
-                                {item.objectives}
-                              </td>
-
-                              {/* Performance Indicator */}
-                              <td className="border-r border-b border-zinc-900 p-2 text-zinc-800 leading-snug">
-                                {item.performanceIndicator}
-                              </td>
-
-                              {/* Target Years */}
-                              <td className="border-r border-b border-zinc-900 p-2 text-center font-bold text-zinc-900">
-                                {item.targetYear1}
-                              </td>
-                              <td className="border-r border-b border-zinc-900 p-2 text-center font-bold text-zinc-900">
-                                {item.targetYear2}
-                              </td>
-                              <td className="border-r border-b border-zinc-900 p-2 text-center font-bold text-zinc-900">
-                                {item.targetYear3}
-                              </td>
-
-                              {/* PPA'S */}
-                              <td className="border-r border-b border-zinc-900 p-2 font-medium text-zinc-900 leading-snug">
-                                {item.ppas}
-                              </td>
-
-                              {/* Budget (Category + Amount) */}
-                              <td className="border-r border-b border-zinc-900 p-2 text-right">
-                                <span className="block text-[9px] font-black uppercase text-zinc-500">
-                                  {item.budgetCategory}
-                                </span>
-                                <span className="font-extrabold text-zinc-900">
-                                  ₱{Number(item.budgetAmount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                </span>
-                              </td>
-
-                              {/* Person Responsible */}
-                              <td className="border-r border-b border-zinc-900 p-2 font-bold text-zinc-900 text-xs uppercase leading-snug">
-                                {item.personResponsible}
-                              </td>
-
-                              {/* Edit Actions in Edit Mode (Hidden in Print) */}
+                      {/* Standard CBYDP 7-Column Table - Header repeated on every sheet so columns are always clear */}
+                      <div className="w-full pt-1">
+                        <table className="cbydp-table w-full border-separate border-spacing-0 border-t border-l border-zinc-900 text-[10px] leading-snug text-left">
+                          <colgroup>
+                            <col style={{ width: "16%" }} />
+                            <col style={{ width: "15%" }} />
+                            <col style={{ width: "16%" }} />
+                            <col style={{ width: "3.5%" }} />
+                            <col style={{ width: "3.5%" }} />
+                            <col style={{ width: "3.5%" }} />
+                            <col style={{ width: "18%" }} />
+                            <col style={{ width: "11.5%" }} />
+                            <col style={{ width: "13%" }} />
+                            {isEditing && <col style={{ width: "8%" }} className="print:hidden" />}
+                          </colgroup>
+                          <thead>
+                            <tr className="bg-zinc-100 text-zinc-900 font-black uppercase text-center">
+                              <th className="border-r border-b border-zinc-900 px-2 py-3.5 w-[16%] align-middle text-[9.5px] tracking-wide" rowSpan={2}>
+                                Youth Development Concern
+                              </th>
+                              <th className="border-r border-b border-zinc-900 px-2 py-3.5 w-[15%] align-middle text-[9.5px] tracking-wide" rowSpan={2}>
+                                Objectives
+                              </th>
+                              <th className="border-r border-b border-zinc-900 px-2 py-3.5 w-[16%] align-middle text-[9.5px] tracking-wide" rowSpan={2}>
+                                Performance Indicator
+                              </th>
+                              <th className="border-r border-b border-zinc-900 px-1 py-2 align-middle text-[9.5px] tracking-wide" colSpan={3}>
+                                Target
+                              </th>
+                              <th className="border-r border-b border-zinc-900 px-2 py-3.5 w-[18%] align-middle text-[9.5px] tracking-wide" rowSpan={2}>
+                                PPA'S
+                              </th>
+                              <th className="border-r border-b border-zinc-900 px-2 py-3.5 w-[11.5%] align-middle text-[9.5px] tracking-wide" rowSpan={2}>
+                                Budget
+                              </th>
+                              <th className="border-r border-b border-zinc-900 px-2 py-3.5 w-[13%] align-middle text-[9.5px] tracking-wide" rowSpan={2}>
+                                Person Responsible
+                              </th>
                               {isEditing && (
-                                <td className="border-r border-b border-zinc-900 p-2 text-center align-middle print:hidden">
-                                  <div className="flex items-center justify-center gap-1">
-                                    <button
-                                      onClick={() => handleOpenEditItem(section.id, item)}
-                                      className="p-1 rounded bg-blue-50 text-blue-700 hover:bg-blue-100"
-                                      title="Edit row"
-                                    >
-                                      <Edit3 className="w-3.5 h-3.5" />
-                                    </button>
-                                    <button
-                                      onClick={() => handleDeleteItem(section.id, item.id)}
-                                      className="p-1 rounded bg-rose-50 text-rose-700 hover:bg-rose-100"
-                                      title="Delete row"
-                                    >
-                                      <Trash2 className="w-3.5 h-3.5" />
-                                    </button>
-                                  </div>
-                                </td>
+                                <th className="border-r border-b border-zinc-900 px-2 py-3.5 w-[8%] align-middle print:hidden text-[9.5px] tracking-wide" rowSpan={2}>
+                                  Actions
+                                </th>
                               )}
                             </tr>
-                          ))
-                        )}
-                      </tbody>
-                      <tfoot>
-                        <tr className="bg-zinc-100/90 font-black text-xs text-zinc-900">
-                          <td colSpan={6} className="border-r border-b border-zinc-900 p-2.5 uppercase tracking-wider">
-                            TOTAL {section.centerName}
-                          </td>
-                          <td colSpan={isEditing ? 4 : 3} className="border-r border-b border-zinc-900 p-2.5 text-right font-black text-sm text-blue-950 font-mono">
-                            ₱{secTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                          </td>
-                        </tr>
-                      </tfoot>
-                    </table>
-                  </div>
-                </div>
+                            <tr className="bg-zinc-100 text-zinc-900 font-extrabold uppercase text-center">
+                              <th className="border-r border-b border-zinc-900 px-1 py-1.5 w-[3.5%] text-[9px]">{doc.targetYearLabels[0] || "2026"}</th>
+                              <th className="border-r border-b border-zinc-900 px-1 py-1.5 w-[3.5%] text-[9px]">{doc.targetYearLabels[1] || "2027"}</th>
+                              <th className="border-r border-b border-zinc-900 px-1 py-1.5 w-[3.5%] text-[9px]">{doc.targetYearLabels[2] || "2028"}</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {chunk.length === 0 ? (
+                              <tr>
+                                <td colSpan={isEditing ? 10 : 9} className="border-r border-b border-zinc-900 p-6 text-center text-zinc-400 italic">
+                                  No items recorded for this Center of Participation.
+                                </td>
+                              </tr>
+                            ) : (
+                              chunk.map((item) => (
+                                <tr key={item.id} className="hover:bg-amber-50/20 transition-colors align-top">
+                                  {/* Concern */}
+                                  <td className="border-r border-b border-zinc-900 p-2 text-zinc-800 leading-snug">
+                                    {item.concern}
+                                  </td>
 
-                {/* Official Page Footer */}
-                <div className="pt-4 mt-6 flex items-center justify-between text-[9px] font-bold text-zinc-500 uppercase tracking-wider border-t border-zinc-300">
-                  <span>Comprehensive Barangay Youth Development Plan (CBYDP) • CY {doc.calendarYears}</span>
-                  <span>Barangay {doc.barangayName} • Center of Participation: {section.centerName}</span>
-                </div>
-              </div>
-              );
+                                  {/* Objectives */}
+                                  <td className="border-r border-b border-zinc-900 p-2 text-zinc-800 leading-snug">
+                                    {item.objectives}
+                                  </td>
+
+                                  {/* Performance Indicator */}
+                                  <td className="border-r border-b border-zinc-900 p-2 text-zinc-800 leading-snug">
+                                    {item.performanceIndicator}
+                                  </td>
+
+                                  {/* Target Years */}
+                                  <td className="border-r border-b border-zinc-900 p-2 text-center font-bold text-zinc-900">
+                                    {item.targetYear1}
+                                  </td>
+                                  <td className="border-r border-b border-zinc-900 p-2 text-center font-bold text-zinc-900">
+                                    {item.targetYear2}
+                                  </td>
+                                  <td className="border-r border-b border-zinc-900 p-2 text-center font-bold text-zinc-900">
+                                    {item.targetYear3}
+                                  </td>
+
+                                  {/* PPA'S */}
+                                  <td className="border-r border-b border-zinc-900 p-2 font-medium text-zinc-900 leading-snug">
+                                    {item.ppas}
+                                  </td>
+
+                                  {/* Budget (Category + Amount) */}
+                                  <td className="border-r border-b border-zinc-900 p-2 text-right">
+                                    <span className="block text-[9px] font-black uppercase text-zinc-500">
+                                      {item.budgetCategory}
+                                    </span>
+                                    <span className="font-extrabold text-zinc-900">
+                                      ₱{Number(item.budgetAmount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                    </span>
+                                  </td>
+
+                                  {/* Person Responsible */}
+                                  <td className="border-r border-b border-zinc-900 p-2 font-bold text-zinc-900 text-xs uppercase leading-snug">
+                                    {item.personResponsible}
+                                  </td>
+
+                                  {/* Edit Actions in Edit Mode (Hidden in Print) */}
+                                  {isEditing && (
+                                    <td className="border-r border-b border-zinc-900 p-2 text-center align-middle print:hidden">
+                                      <div className="flex items-center justify-center gap-1">
+                                        <button
+                                          onClick={() => handleOpenEditItem(section.id, item)}
+                                          className="p-1 rounded bg-blue-50 text-blue-700 hover:bg-blue-100 cursor-pointer"
+                                          title="Edit row"
+                                        >
+                                          <Edit3 className="w-3.5 h-3.5" />
+                                        </button>
+                                        <button
+                                          onClick={() => handleDeleteItem(section.id, item.id)}
+                                          className="p-1 rounded bg-rose-50 text-rose-700 hover:bg-rose-100 cursor-pointer"
+                                          title="Delete row"
+                                        >
+                                          <Trash2 className="w-3.5 h-3.5" />
+                                        </button>
+                                      </div>
+                                    </td>
+                                  )}
+                                </tr>
+                              ))
+                            )}
+                          </tbody>
+                          <tfoot>
+                            {isLastSubpage ? (
+                              <tr className="bg-zinc-100/90 font-black text-xs text-zinc-900">
+                                <td colSpan={6} className="border-r border-b border-zinc-900 p-2.5 uppercase tracking-wider">
+                                  TOTAL {section.centerName}
+                                </td>
+                                <td colSpan={isEditing ? 4 : 3} className="border-r border-b border-zinc-900 p-2.5 text-right font-black text-sm text-blue-950 font-mono">
+                                  ₱{secTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </td>
+                              </tr>
+                            ) : (
+                              <tr className="bg-zinc-100/70 font-bold text-[9px] text-zinc-600">
+                                <td colSpan={isEditing ? 10 : 9} className="border-r border-b border-zinc-900 p-2 text-right uppercase tracking-wider italic">
+                                  Continued on next sheet [Sheet {chunkIdx + 2} of {chunks.length}] →
+                                </td>
+                              </tr>
+                            )}
+                          </tfoot>
+                        </table>
+                      </div>
+                    </div>
+
+                    {/* Official Page Footer */}
+                    <div className="pt-4 mt-6 flex items-center justify-between text-[9px] font-bold text-zinc-500 uppercase tracking-wider border-t border-zinc-300">
+                      <span>Comprehensive Barangay Youth Development Plan (CBYDP) • CY {doc.calendarYears}</span>
+                      <span>Barangay {doc.barangayName} • Center of Participation: {section.centerName} {chunks.length > 1 ? `[Sheet ${chunkIdx + 1} of ${chunks.length}]` : ""}</span>
+                    </div>
+                  </div>
+                );
+              });
             })}
           </div>
 
@@ -1383,6 +1504,18 @@ export function CbydpTemplatePage() {
           </div>
         </div>
       )}
+
+      {/* Print Preview Modal */}
+      <PrintPreviewModal
+        isOpen={isPrintPreviewOpen}
+        onClose={() => setIsPrintPreviewOpen(false)}
+        title={`CBYDP CY ${doc.calendarYears} - Barangay ${doc.barangayName}`}
+        subtitle="Comprehensive Barangay Youth Development Plan"
+        documentType="CBYDP"
+        pageElementsSelector=".cbydp-page-break"
+        onExportPdf={handleExportPdf}
+        isExportingPdf={isExportingPdf}
+      />
 
     </div>
   );

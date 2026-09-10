@@ -23,7 +23,7 @@
 @media print {
   @page {
     size: A4 landscape;
-    margin: 8mm 8mm 8mm 8mm;
+    margin: 0mm; /* Zero outer margin so the A4 sheet fills the paper exactly without browser-injected gaps */
   }
 
   html, body {
@@ -46,7 +46,51 @@
     display: none !important;
   }
 
-  /* Discrete Page Break Containers */
+  /* When printing from the Print Preview Modal, ONLY print the preview sheets */
+  body.printing-from-modal > *:not(#print-preview-modal) {
+    display: none !important;
+  }
+
+  body.printing-from-modal #print-preview-modal {
+    display: block !important;
+    position: static !important;
+    background: transparent !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    overflow: visible !important;
+    z-index: 99999 !important;
+  }
+
+  body.printing-from-modal #print-preview-modal header,
+  body.printing-from-modal #print-preview-modal footer,
+  body.printing-from-modal #print-preview-modal .preview-controls,
+  body.printing-from-modal #print-preview-modal .no-print {
+    display: none !important;
+  }
+
+  body.printing-from-modal .preview-canvas-container {
+    padding: 0 !important;
+    margin: 0 !important;
+    background: transparent !important;
+    overflow: visible !important;
+  }
+
+  body.printing-from-modal .preview-a4-sheet {
+    box-shadow: none !important;
+    margin: 0 auto !important;
+    width: 297mm !important;
+    min-height: 210mm !important;
+    max-height: 210mm !important;
+    page-break-after: always !important;
+    break-after: page !important;
+    border: none !important;
+    border-radius: 0 !important;
+    transform: none !important;
+    overflow: hidden !important;
+    box-sizing: border-box !important;
+  }
+
+  /* Discrete Page Break Containers for standard page print */
   .cbydp-page-break,
   .abyip-page-break,
   .budget-page-break,
@@ -55,9 +99,10 @@
     border: none !important;
     border-radius: 0 !important;
     margin: 0 !important;
-    padding: 0 !important;
+    padding: 8mm !important;
     page-break-inside: auto !important;
     break-inside: auto !important;
+    box-sizing: border-box !important;
   }
 
   .print-page-break-after {
@@ -91,5 +136,58 @@
   tfoot {
     display: table-footer-group !important;
   }
+}
+
+/* Custom density utility classes for printing without gaps */
+.density-tight table td,
+.density-tight table th {
+  padding-top: 2px !important;
+  padding-bottom: 2px !important;
+  padding-left: 4px !important;
+  padding-right: 4px !important;
+  line-height: 1.15 !important;
+}
+
+.density-compact table td,
+.density-compact table th {
+  padding-top: 4px !important;
+  padding-bottom: 4px !important;
+  padding-left: 6px !important;
+  padding-right: 6px !important;
+  line-height: 1.25 !important;
+}
+
+.density-standard table td,
+.density-standard table th {
+  padding-top: 8px !important;
+  padding-bottom: 8px !important;
+  padding-left: 8px !important;
+  padding-right: 8px !important;
+  line-height: 1.35 !important;
+}
+
+/* Eliminate empty vertical gaps when toggle active */
+.no-vertical-gaps .cbydp-page-break,
+.no-vertical-gaps .abyip-page-break,
+.no-vertical-gaps .budget-page-break {
+  min-height: unset !important;
+  justify-content: flex-start !important;
+}
+
+.no-vertical-gaps .pt-4.mt-6 {
+  margin-top: 8px !important;
+  padding-top: 6px !important;
+}
+
+/* Editable content focus styles */
+[contenteditable="true"]:hover {
+  outline: 1px dashed #3b82f6 !important;
+  cursor: text !important;
+}
+
+[contenteditable="true"]:focus {
+  outline: 2px solid #2563eb !important;
+  background-color: #eff6ff !important;
+  border-radius: 2px !important;
 }
 

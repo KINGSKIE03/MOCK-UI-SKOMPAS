@@ -27,6 +27,7 @@ import { useNavigate, Link } from "react-router-dom";
 import html2canvas from "html2canvas-pro";
 import { jsPDF } from "jspdf";
 import { exportOfficialLandscapePdf } from "../lib/pdfExport";
+import { PrintPreviewModal } from "../components/PrintPreviewModal";
 import { useAuth } from "../components/auth/AuthProvider";
 import { 
   AbyipDocument, 
@@ -45,6 +46,76 @@ import {
 } from "../lib/abyipStore";
 import { MUNICIPAL_BARANGAYS_40 } from "../lib/barangayStore";
 
+/**
+ * Estimates the rendered pixel height of an ABYIP row on A4 Landscape.
+ * Dynamically accounts for multi-line text wrapping across all columns.
+ */
+function estimateAbyipRowHeight(item: AbyipRowItem): number {
+  const charsCode = item.referenceCode?.length || 0;
+  const charsPpa = item.ppaName?.length || 0;
+  const charsDesc = item.description?.length || 0;
+  const charsResults = item.expectedResults?.length || 0;
+  const charsIndicator = item.performanceIndicator?.length || 0;
+  const charsPeriod = item.periodImplementation?.length || 0;
+  const charsPerson = item.personResponsible?.length || 0;
+
+  // Approx characters per line in landscape A4 table:
+  const linesCode = Math.ceil(charsCode / 14);
+  const linesPpa = Math.ceil(charsPpa / 24);
+  const linesDesc = Math.ceil(charsDesc / 34);
+  const linesResults = Math.ceil(charsResults / 18);
+  const linesIndicator = Math.ceil(charsIndicator / 18);
+  const linesPeriod = Math.ceil(charsPeriod / 16);
+  const linesPerson = Math.ceil(charsPerson / 18);
+
+  const maxLines = Math.max(1, linesCode, linesPpa, linesDesc, linesResults, linesIndicator, linesPeriod, linesPerson);
+  return Math.max(44, Math.min(180, maxLines * 13 + 16));
+}
+
+/**
+ * Greedily packs ABYIP items into sheets to completely fill each Landscape A4 page.
+ * Avoids premature page divides and guarantees that each page is fully utilized.
+ */
+function paginateAbyipSection(section: AbyipCenterSection): AbyipRowItem[][] {
+  const items = section.items || [];
+  if (items.length === 0) return [[]];
+
+  // Program header row (e.g. GENERAL ADMINISTRATIVE PROGRAM) takes ~28px if present on sheet 1
+  const hasProgHeader = !!section.programHeader;
+  const sheet1Capacity = hasProgHeader ? 480 : 510;
+  const continuationCapacity = 550;
+
+  const chunks: AbyipRowItem[][] = [];
+  let currentChunk: AbyipRowItem[] = [];
+  let currentHeight = 0;
+  let isFirstSheet = true;
+
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    const rowHeight = estimateAbyipRowHeight(item);
+    const capacity = isFirstSheet ? sheet1Capacity : continuationCapacity;
+
+    // Reserve space for subtotal row or continuation notice at bottom
+    const reservedBottom = 35;
+
+    if (currentChunk.length > 0 && currentHeight + rowHeight + reservedBottom > capacity) {
+      chunks.push(currentChunk);
+      currentChunk = [item];
+      currentHeight = rowHeight;
+      isFirstSheet = false;
+    } else {
+      currentChunk.push(item);
+      currentHeight += rowHeight;
+    }
+  }
+
+  if (currentChunk.length > 0) {
+    chunks.push(currentChunk);
+  }
+
+  return chunks;
+}
+
 const defaultEmblem = "/src/assets/images/input_file_0.png";
 
 export function AbyipTemplatePage() {
@@ -62,6 +133,7 @@ export function AbyipTemplatePage() {
 
   // View & Edit Mode state
   const [isEditing, setIsEditing] = useState<boolean>(false);
+  const [isPrintPreviewOpen, setIsPrintPreviewOpen] = useState<boolean>(false);
   const [activeTab, setActiveTab] = useState<string>("all"); // "all", "cover", "budget", or center id
   const [toastMessage, setToastMessage] = useState<{ text: string; type: "success" | "error" | "info" } | null>(null);
 
@@ -452,9 +524,25 @@ export function AbyipTemplatePage() {
               )}
             </button>
 
+            {/* Print Preview Button */}
+            <button
+              onClick={() => {
+                if (isEditing) setIsEditing(false);
+                setIsPrintPreviewOpen(true);
+              }}
+              className="px-3.5 py-2 rounded-xl bg-[#0F294A] hover:bg-[#153663] text-amber-300 border border-amber-400/40 text-xs font-black uppercase tracking-wider flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer shadow-sm"
+              title="Preview ABYIP document exactly as rendered on A4 landscape paper"
+            >
+              <Eye className="w-3.5 h-3.5 text-amber-400" />
+              <span>Print Preview</span>
+            </button>
+
             {/* Print Button */}
             <button
-              onClick={() => window.print()}
+              onClick={() => {
+                if (isEditing) setIsEditing(false);
+                setTimeout(() => window.print(), 100);
+              }}
               className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-zinc-200 border border-slate-700 text-xs font-black uppercase tracking-wider flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer"
               title="Prints directly in official landscape orientation"
             >
@@ -822,242 +910,274 @@ export function AbyipTemplatePage() {
         {/* ========================================================================= */}
         {doc.sections.map((section, secIdx) => {
           const secTotals = calculateAbyipSectionTotals(section);
+          // Intelligently paginate items to completely fill each Landscape A4 page
+          const chunks = paginateAbyipSection(section);
 
-          return (
-            <div
-              key={section.id}
-              id={section.id}
-              className="abyip-page-break bg-white text-zinc-900 border border-zinc-300 shadow-xl rounded-2xl p-6 sm:p-8 mb-8 print:border-none print:shadow-none print:rounded-none print:p-0 print:mb-0"
-            >
-              {/* Center Page Title Block (Exact format from PDF Pages 1-9) */}
-              <div className="border border-black bg-white px-4 py-2 mb-0">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h2 className="text-sm font-black tracking-wide text-black uppercase">
-                      ANNUAL BARANGAY YOUTH INVESTMENT PLAN {doc.calendarYear}
-                    </h2>
-                    <h3 className="text-xs font-black tracking-wide text-black uppercase">
-                      CENTER OF PARTICIPATION: {section.centerName}
-                    </h3>
+          return chunks.map((chunk, chunkIdx) => {
+            const isFirstSubpage = chunkIdx === 0;
+            const isLastSubpage = chunkIdx === chunks.length - 1;
+            const subpageId = isFirstSubpage ? section.id : `${section.id}-part-${chunkIdx + 1}`;
+
+            return (
+              <div
+                key={subpageId}
+                id={subpageId}
+                className="abyip-page-break bg-white text-zinc-900 border border-zinc-300 shadow-xl rounded-2xl p-6 sm:p-8 mb-8 print:border-none print:shadow-none print:rounded-none print:p-0 print:mb-0 flex flex-col justify-between"
+              >
+                <div>
+                  {/* Center Page Title Block (Exact format from PDF Pages 1-9) */}
+                  <div className="border border-black bg-white px-4 py-2 mb-0">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h2 className="text-sm font-black tracking-wide text-black uppercase">
+                          ANNUAL BARANGAY YOUTH INVESTMENT PLAN {doc.calendarYear}
+                        </h2>
+                        <h3 className="text-xs font-black tracking-wide text-black uppercase">
+                          CENTER OF PARTICIPATION: {section.centerName}
+                          {!isFirstSubpage && " (CONTINUATION)"}
+                          {chunks.length > 1 && (
+                            <span className="ml-2 font-mono text-[11px] text-zinc-600 font-bold">
+                              [Sheet {chunkIdx + 1} of {chunks.length}]
+                            </span>
+                          )}
+                        </h3>
+                      </div>
+
+                      {isEditing && (
+                        <button
+                          onClick={() => handleOpenAddPpa(section.id)}
+                          className="px-3 py-1 bg-emerald-700 hover:bg-emerald-600 text-white rounded-lg text-xs font-black flex items-center gap-1 shadow-sm print:hidden cursor-pointer"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>Add PPA Row</span>
+                        </button>
+                      )}
+                    </div>
                   </div>
 
-                  {isEditing && (
-                    <button
-                      onClick={() => handleOpenAddPpa(section.id)}
-                      className="px-3 py-1 bg-emerald-700 hover:bg-emerald-600 text-white rounded-lg text-xs font-black flex items-center gap-1 shadow-sm print:hidden"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      <span>Add PPA Row</span>
-                    </button>
-                  )}
-                </div>
-              </div>
+                  {/* The Exact Official Landscape Table */}
+                  <div className="overflow-x-auto print:overflow-visible">
+                    <table className="abyip-table w-full border-collapse text-[10px] border border-black font-sans">
+                      {/* Fixed column widths so table NEVER collapses or merges */}
+                      <colgroup>
+                        <col style={{ width: "95px" }} />
+                        <col style={{ width: "190px" }} />
+                        <col style={{ width: "260px" }} />
+                        <col style={{ width: "135px" }} />
+                        <col style={{ width: "135px" }} />
+                        <col style={{ width: "115px" }} />
+                        <col style={{ width: "80px" }} />
+                        <col style={{ width: "65px" }} />
+                        <col style={{ width: "80px" }} />
+                        <col style={{ width: "90px" }} />
+                        <col style={{ width: "120px" }} />
+                        {isEditing && <col style={{ width: "70px" }} className="print:hidden" />}
+                      </colgroup>
 
-              {/* The Exact Official Landscape Table */}
-              <div className="overflow-x-auto print:overflow-visible">
-                <table className="abyip-table w-full border-collapse text-[10px] border border-black font-sans">
-                  {/* Fixed column widths so table NEVER collapses or merges */}
-                  <colgroup>
-                    <col style={{ width: "95px" }} />
-                    <col style={{ width: "190px" }} />
-                    <col style={{ width: "260px" }} />
-                    <col style={{ width: "135px" }} />
-                    <col style={{ width: "135px" }} />
-                    <col style={{ width: "115px" }} />
-                    <col style={{ width: "80px" }} />
-                    <col style={{ width: "65px" }} />
-                    <col style={{ width: "80px" }} />
-                    <col style={{ width: "90px" }} />
-                    <col style={{ width: "120px" }} />
-                    {isEditing && <col style={{ width: "70px" }} className="print:hidden" />}
-                  </colgroup>
-
-                  {/* Header Rows (Gold/Yellow background #f7a81b matching PDF) */}
-                  <thead>
-                    <tr className="bg-[#f7a81b] text-black font-bold uppercase text-center border-b border-black text-[9px] leading-tight">
-                      <th rowSpan={2} className="border border-black p-1.5 align-middle">
-                        REFERENCE<br />CODE
-                      </th>
-                      <th rowSpan={2} className="border border-black p-1.5 align-middle">
-                        PPA's
-                      </th>
-                      <th rowSpan={2} className="border border-black p-1.5 align-middle">
-                        DESCRIPTION
-                      </th>
-                      <th rowSpan={2} className="border border-black p-1.5 align-middle">
-                        EXPECTED<br />RESULTS
-                      </th>
-                      <th rowSpan={2} className="border border-black p-1.5 align-middle">
-                        PERFORMANCE<br />INDICATOR
-                      </th>
-                      <th rowSpan={2} className="border border-black p-1.5 align-middle">
-                        PERIOD<br />IMPLEMENTATION
-                      </th>
-                      <th colSpan={4} className="border border-black p-1 text-center font-black">
-                        SCHEDULE OF CASH / BUDGET CLASSIFICATION
-                      </th>
-                      <th rowSpan={2} className="border border-black p-1.5 align-middle">
-                        PERSON<br />RESPONSIBLE
-                      </th>
-                      {isEditing && (
-                        <th rowSpan={2} className="border border-black p-1.5 align-middle print:hidden">
-                          ACTION
-                        </th>
-                      )}
-                    </tr>
-                    <tr className="bg-[#f7a81b] text-black font-bold uppercase text-center border-b border-black text-[9px]">
-                      <th className="border border-black p-1">MOOE</th>
-                      <th className="border border-black p-1">CO</th>
-                      <th className="border border-black p-1">PS</th>
-                      <th className="border border-black p-1 font-black">Total</th>
-                    </tr>
-                  </thead>
-
-                  <tbody>
-                    {/* Program Header Sub-row (e.g. GENERAL ADMINISTRATIVE PROGRAM) */}
-                    {section.programHeader && (
-                      <tr className="bg-white text-black font-black uppercase text-left text-[10px] border-b border-black">
-                        <td colSpan={isEditing ? 12 : 11} className="border border-black p-1.5 pl-2 tracking-wide font-black">
-                          {section.programHeader}
-                        </td>
-                      </tr>
-                    )}
-
-                    {/* Section Item Rows */}
-                    {section.items.map((item, itmIdx) => {
-                      return (
-                        <tr 
-                          key={item.id}
-                          className="hover:bg-amber-50/40 transition-colors border-b border-black align-top text-black text-[9.5px]"
-                        >
-                          {/* Reference Code */}
-                          <td className="border border-black p-1.5 font-mono text-[9px] font-semibold text-center whitespace-pre-line">
-                            {item.referenceCode || "—"}
-                          </td>
-
-                          {/* PPA Name */}
-                          <td className="border border-black p-1.5 font-bold uppercase whitespace-pre-line leading-snug">
-                            {item.ppaName}
-                          </td>
-
-                          {/* Description */}
-                          <td className="border border-black p-1.5 leading-relaxed text-justify">
-                            {item.description}
-                          </td>
-
-                          {/* Expected Results */}
-                          <td className="border border-black p-1.5 leading-snug text-left">
-                            {item.expectedResults}
-                          </td>
-
-                          {/* Performance Indicator */}
-                          <td className="border border-black p-1.5 leading-snug text-left">
-                            {item.performanceIndicator}
-                          </td>
-
-                          {/* Period Implementation */}
-                          <td className="border border-black p-1.5 text-center font-medium">
-                            {item.periodImplementation}
-                          </td>
-
-                          {/* MOOE */}
-                          <td className="border border-black p-1.5 text-right font-mono font-medium">
-                            {item.mooe > 0 ? formatCurrency(item.mooe) : "—"}
-                          </td>
-
-                          {/* CO */}
-                          <td className="border border-black p-1.5 text-right font-mono font-medium">
-                            {item.co > 0 ? formatCurrency(item.co) : "—"}
-                          </td>
-
-                          {/* PS */}
-                          <td className="border border-black p-1.5 text-right font-mono font-medium">
-                            {item.ps > 0 ? formatCurrency(item.ps) : "—"}
-                          </td>
-
-                          {/* Total */}
-                          <td className="border border-black p-1.5 text-right font-mono font-bold">
-                            {formatCurrency(item.total || (item.mooe + item.co + item.ps))}
-                          </td>
-
-                          {/* Person Responsible */}
-                          <td className="border border-black p-1.5 text-center leading-tight">
-                            {item.personResponsible}
-                          </td>
-
-                          {/* Edit / Delete Actions */}
+                      {/* Header Rows (Gold/Yellow background #f7a81b matching PDF) */}
+                      <thead>
+                        <tr className="bg-[#f7a81b] text-black font-bold uppercase text-center border-b border-black text-[9px] leading-tight">
+                          <th rowSpan={2} className="border border-black p-1.5 align-middle">
+                            REFERENCE<br />CODE
+                          </th>
+                          <th rowSpan={2} className="border border-black p-1.5 align-middle">
+                            PPA's
+                          </th>
+                          <th rowSpan={2} className="border border-black p-1.5 align-middle">
+                            DESCRIPTION
+                          </th>
+                          <th rowSpan={2} className="border border-black p-1.5 align-middle">
+                            EXPECTED<br />RESULTS
+                          </th>
+                          <th rowSpan={2} className="border border-black p-1.5 align-middle">
+                            PERFORMANCE<br />INDICATOR
+                          </th>
+                          <th rowSpan={2} className="border border-black p-1.5 align-middle">
+                            PERIOD<br />IMPLEMENTATION
+                          </th>
+                          <th colSpan={4} className="border border-black p-1 text-center font-black">
+                            SCHEDULE OF CASH / BUDGET CLASSIFICATION
+                          </th>
+                          <th rowSpan={2} className="border border-black p-1.5 align-middle">
+                            PERSON<br />RESPONSIBLE
+                          </th>
                           {isEditing && (
-                            <td className="border border-black p-1.5 text-center print:hidden">
-                              <div className="flex items-center justify-center gap-1">
-                                <button
-                                  onClick={() => handleOpenEditPpa(section.id, item)}
-                                  className="p-1 text-blue-700 hover:bg-blue-100 rounded"
-                                  title="Edit PPA"
-                                >
-                                  <Edit3 className="w-3.5 h-3.5" />
-                                </button>
-                                <button
-                                  onClick={() => handleDeletePpa(section.id, item.id)}
-                                  className="p-1 text-rose-700 hover:bg-rose-100 rounded"
-                                  title="Delete PPA"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
-                              </div>
-                            </td>
+                            <th rowSpan={2} className="border border-black p-1.5 align-middle print:hidden">
+                              ACTION
+                            </th>
                           )}
                         </tr>
-                      );
-                    })}
+                        <tr className="bg-[#f7a81b] text-black font-bold uppercase text-center border-b border-black text-[9px]">
+                          <th className="border border-black p-1">MOOE</th>
+                          <th className="border border-black p-1">CO</th>
+                          <th className="border border-black p-1">PS</th>
+                          <th className="border border-black p-1 font-black">Total</th>
+                        </tr>
+                      </thead>
 
-                    {/* Section Subtotal Row */}
-                    <tr className="bg-zinc-100 font-black text-black border-t border-b border-black text-[9.5px]">
-                      <td colSpan={6} className="border border-black p-1.5 text-right uppercase tracking-wider">
-                        SUBTOTAL ({section.centerName}):
-                      </td>
-                      <td className="border border-black p-1.5 text-right font-mono">
-                        {formatCurrency(secTotals.mooe)}
-                      </td>
-                      <td className="border border-black p-1.5 text-right font-mono">
-                        {formatCurrency(secTotals.co)}
-                      </td>
-                      <td className="border border-black p-1.5 text-right font-mono">
-                        {formatCurrency(secTotals.ps)}
-                      </td>
-                      <td className="border border-black p-1.5 text-right font-mono text-black">
-                        {formatCurrency(secTotals.total)}
-                      </td>
-                      <td className="border border-black p-1.5"></td>
-                      {isEditing && <td className="border border-black p-1.5 print:hidden"></td>}
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
+                      <tbody>
+                        {/* Program Header Sub-row (e.g. GENERAL ADMINISTRATIVE PROGRAM) on first sheet */}
+                        {isFirstSubpage && section.programHeader && (
+                          <tr className="bg-white text-black font-black uppercase text-left text-[10px] border-b border-black">
+                            <td colSpan={isEditing ? 12 : 11} className="border border-black p-1.5 pl-2 tracking-wide font-black">
+                              {section.programHeader}
+                            </td>
+                          </tr>
+                        )}
 
-              {/* Bottom Signatories on each page if needed */}
-              <div className="grid grid-cols-2 gap-8 pt-6 mt-4 border-t border-zinc-300">
-                <div className="text-left space-y-0.5">
-                  <p className="text-[9px] font-medium text-zinc-500">Prepared by:</p>
-                  <p className="text-xs font-black uppercase text-zinc-900 border-b border-zinc-800 pb-0.5 inline-block min-w-[180px]">
-                    {doc.preparedByName}
-                  </p>
-                  <p className="text-[9px] font-bold uppercase text-zinc-600 tracking-wider">
-                    {doc.preparedByTitle}
-                  </p>
+                        {/* Section Item Rows */}
+                        {chunk.length === 0 ? (
+                          <tr className="border-b border-black">
+                            <td colSpan={isEditing ? 12 : 11} className="p-4 text-center text-zinc-400 italic">
+                              No PPA entries for this Center of Participation.
+                            </td>
+                          </tr>
+                        ) : (
+                          chunk.map((item, itmIdx) => {
+                            return (
+                              <tr 
+                                key={item.id}
+                                className="hover:bg-amber-50/40 transition-colors border-b border-black align-top text-black text-[9.5px]"
+                              >
+                                {/* Reference Code */}
+                                <td className="border border-black p-1.5 font-mono text-[9px] font-semibold text-center whitespace-pre-line">
+                                  {item.referenceCode || "—"}
+                                </td>
+
+                                {/* PPA Name */}
+                                <td className="border border-black p-1.5 font-bold uppercase whitespace-pre-line leading-snug">
+                                  {item.ppaName}
+                                </td>
+
+                                {/* Description */}
+                                <td className="border border-black p-1.5 leading-relaxed text-justify">
+                                  {item.description}
+                                </td>
+
+                                {/* Expected Results */}
+                                <td className="border border-black p-1.5 leading-snug text-left">
+                                  {item.expectedResults}
+                                </td>
+
+                                {/* Performance Indicator */}
+                                <td className="border border-black p-1.5 leading-snug text-left">
+                                  {item.performanceIndicator}
+                                </td>
+
+                                {/* Period Implementation */}
+                                <td className="border border-black p-1.5 text-center font-medium">
+                                  {item.periodImplementation}
+                                </td>
+
+                                {/* MOOE */}
+                                <td className="border border-black p-1.5 text-right font-mono font-medium">
+                                  {item.mooe > 0 ? formatCurrency(item.mooe) : "—"}
+                                </td>
+
+                                {/* CO */}
+                                <td className="border border-black p-1.5 text-right font-mono font-medium">
+                                  {item.co > 0 ? formatCurrency(item.co) : "—"}
+                                </td>
+
+                                {/* PS */}
+                                <td className="border border-black p-1.5 text-right font-mono font-medium">
+                                  {item.ps > 0 ? formatCurrency(item.ps) : "—"}
+                                </td>
+
+                                {/* Total */}
+                                <td className="border border-black p-1.5 text-right font-mono font-bold">
+                                  {formatCurrency(item.total || (item.mooe + item.co + item.ps))}
+                                </td>
+
+                                {/* Person Responsible */}
+                                <td className="border border-black p-1.5 text-center leading-tight">
+                                  {item.personResponsible}
+                                </td>
+
+                                {/* Edit / Delete Actions */}
+                                {isEditing && (
+                                  <td className="border border-black p-1.5 text-center print:hidden">
+                                    <div className="flex items-center justify-center gap-1">
+                                      <button
+                                        onClick={() => handleOpenEditPpa(section.id, item)}
+                                        className="p-1 text-blue-700 hover:bg-blue-100 rounded cursor-pointer"
+                                        title="Edit PPA"
+                                      >
+                                        <Edit3 className="w-3.5 h-3.5" />
+                                      </button>
+                                      <button
+                                        onClick={() => handleDeletePpa(section.id, item.id)}
+                                        className="p-1 text-rose-700 hover:bg-rose-100 rounded cursor-pointer"
+                                        title="Delete PPA"
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                      </button>
+                                    </div>
+                                  </td>
+                                )}
+                              </tr>
+                            );
+                          })
+                        )}
+
+                        {/* Section Subtotal Row on last sheet of center */}
+                        {isLastSubpage ? (
+                          <tr className="bg-zinc-100 font-black text-black border-t border-b border-black text-[9.5px]">
+                            <td colSpan={6} className="border border-black p-1.5 text-right uppercase tracking-wider">
+                              SUBTOTAL ({section.centerName}):
+                            </td>
+                            <td className="border border-black p-1.5 text-right font-mono">
+                              {formatCurrency(secTotals.mooe)}
+                            </td>
+                            <td className="border border-black p-1.5 text-right font-mono">
+                              {formatCurrency(secTotals.co)}
+                            </td>
+                            <td className="border border-black p-1.5 text-right font-mono">
+                              {formatCurrency(secTotals.ps)}
+                            </td>
+                            <td className="border border-black p-1.5 text-right font-mono text-black">
+                              {formatCurrency(secTotals.total)}
+                            </td>
+                            <td className="border border-black p-1.5"></td>
+                            {isEditing && <td className="border border-black p-1.5 print:hidden"></td>}
+                          </tr>
+                        ) : (
+                          <tr className="bg-zinc-100 font-bold text-zinc-700 border-t border-b border-black text-[9px]">
+                            <td colSpan={isEditing ? 12 : 11} className="border border-black p-1.5 text-right uppercase tracking-wider italic">
+                              Continued on next sheet [Sheet {chunkIdx + 2} of {chunks.length}] →
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
 
-                <div className="text-right space-y-0.5">
-                  <p className="text-[9px] font-medium text-zinc-500">Approved by:</p>
-                  <p className="text-xs font-black uppercase text-zinc-900 border-b border-zinc-800 pb-0.5 inline-block min-w-[180px]">
-                    {doc.approvedByName}
-                  </p>
-                  <p className="text-[9px] font-bold uppercase text-zinc-600 tracking-wider">
-                    {doc.approvedByTitle}
-                  </p>
+                {/* Bottom Signatories on each page */}
+                <div className="grid grid-cols-2 gap-8 pt-4 mt-3 border-t border-zinc-300">
+                  <div className="text-left space-y-0.5">
+                    <p className="text-[9px] font-medium text-zinc-500">Prepared by:</p>
+                    <p className="text-xs font-black uppercase text-zinc-900 border-b border-zinc-800 pb-0.5 inline-block min-w-[180px]">
+                      {doc.preparedByName}
+                    </p>
+                    <p className="text-[9px] font-bold uppercase text-zinc-600 tracking-wider">
+                      {doc.preparedByTitle}
+                    </p>
+                  </div>
+
+                  <div className="text-right space-y-0.5">
+                    <p className="text-[9px] font-medium text-zinc-500">Approved by:</p>
+                    <p className="text-xs font-black uppercase text-zinc-900 border-b border-zinc-800 pb-0.5 inline-block min-w-[180px]">
+                      {doc.approvedByName}
+                    </p>
+                    <p className="text-[9px] font-bold uppercase text-zinc-600 tracking-wider">
+                      {doc.approvedByTitle}
+                    </p>
+                  </div>
                 </div>
               </div>
-            </div>
-          );
+            );
+          });
         })}
 
         {/* ========================================================================= */}
@@ -1749,6 +1869,18 @@ export function AbyipTemplatePage() {
           </div>
         )}
       </AnimatePresence>
+
+      {/* Print Preview Modal */}
+      <PrintPreviewModal
+        isOpen={isPrintPreviewOpen}
+        onClose={() => setIsPrintPreviewOpen(false)}
+        title={`ABYIP CY ${doc.calendarYear} - Barangay ${doc.barangayName}`}
+        subtitle="Annual Barangay Youth Investment Program"
+        documentType="ABYIP"
+        pageElementsSelector=".abyip-page-break"
+        onExportPdf={handleExportPdf}
+        isExportingPdf={isExportingPdf}
+      />
     </div>
   );
 }
