@@ -242,5 +242,25 @@ export interface BudgetDocument {
   createdAt?: string;
 }
 
+export type VersionDocType = "CBYDP" | "ABYIP" | "Annual Budget" | "Editor Document";
+
+export interface DocumentVersion {
+  id: string;
+  docType: VersionDocType;
+  barangayName: string;
+  versionNumber: number;
+  versionTag: string; // e.g. "v1.0", "v1.2", "v2.0 - Council Approved"
+  authorName: string;
+  authorRole: string; // "Chairman" | "Secretary" | "Treasurer" | "LYDO Admin"
+  timestamp: string; // ISO date-time
+  summaryNote: string;
+  changes?: string[];
+  totalBudget?: number;
+  itemsCount?: number;
+  isCurrent?: boolean;
+  status?: "Draft" | "Pending Review" | "Approved";
+  snapshot: any;
+}
+
 
 

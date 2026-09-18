@@ -21,13 +21,17 @@ import {
   Upload,
   Image as ImageIcon,
   Check,
-  ChevronDown
+  ChevronDown,
+  ShieldCheck,
+  Sparkles
 } from "lucide-react";
 import { useNavigate, Link } from "react-router-dom";
 import html2canvas from "html2canvas-pro";
 import { jsPDF } from "jspdf";
 import { exportOfficialLandscapePdf } from "../lib/pdfExport";
 import { PrintPreviewModal } from "../components/PrintPreviewModal";
+import { ScanCheckModal } from "../components/compliance/ScanCheckModal";
+import { scanAbyipDocument, ScanCheckResult, ScanFinding } from "../lib/documentScanner";
 import { useAuth } from "../components/auth/AuthProvider";
 import { 
   AbyipDocument, 
@@ -143,6 +147,21 @@ export function AbyipTemplatePage() {
     item: AbyipRowItem;
     isNew: boolean;
   } | null>(null);
+
+  // Scan & Check modal states
+  const [isScanModalOpen, setIsScanModalOpen] = useState<boolean>(false);
+  const [isScanningCheck, setIsScanningCheck] = useState<boolean>(false);
+  const [scanResult, setScanResult] = useState<ScanCheckResult | null>(null);
+
+  const handleScanAndCheck = () => {
+    setIsScanningCheck(true);
+    setIsScanModalOpen(true);
+    setTimeout(() => {
+      const result = scanAbyipDocument(doc);
+      setScanResult(result);
+      setIsScanningCheck(false);
+    }, 900);
+  };
 
   // File upload input refs for logos
   const leftLogoInputRef = useRef<HTMLInputElement>(null);
@@ -493,6 +512,22 @@ export function AbyipTemplatePage() {
             >
               {isEditing ? <Eye className="w-3.5 h-3.5" /> : <Edit3 className="w-3.5 h-3.5" />}
               <span>{isEditing ? "Preview Clean PDF" : "Edit Fields & PPAs"}</span>
+            </button>
+
+            {/* SCAN & CHECK Button */}
+            <button
+              id="btn-scan-check-abyip"
+              onClick={handleScanAndCheck}
+              disabled={isScanningCheck}
+              className="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 text-xs font-black uppercase tracking-wider flex items-center gap-1.5 shadow-md shadow-amber-950/20 transition-all active:scale-95 cursor-pointer border border-amber-300 disabled:opacity-50"
+              title="Scan entered ABYIP, check for missing/incorrect info, and analyze PPA alignment"
+            >
+              {isScanningCheck ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin text-slate-950" />
+              ) : (
+                <ShieldCheck className="w-3.5 h-3.5 text-slate-950" />
+              )}
+              <span>SCAN & CHECK</span>
             </button>
 
             {/* Save Button */}
@@ -1880,6 +1915,15 @@ export function AbyipTemplatePage() {
         pageElementsSelector=".abyip-page-break"
         onExportPdf={handleExportPdf}
         isExportingPdf={isExportingPdf}
+      />
+
+      {/* Statutory Scan & Check Modal */}
+      <ScanCheckModal
+        isOpen={isScanModalOpen}
+        onClose={() => setIsScanModalOpen(false)}
+        result={scanResult}
+        isScanning={isScanningCheck}
+        onReScan={handleScanAndCheck}
       />
     </div>
   );

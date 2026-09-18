@@ -1,7 +1,7 @@
 import { motion } from "motion/react";
 import { UserRole } from "../types";
 import { 
-  Plus, Search, FileText, AlertCircle, CheckCircle2, Clock, ThumbsUp, ThumbsDown, Filter, FileCheck, BarChart3,
+  Plus, Search, FileText, AlertCircle, CheckCircle2, Clock, ThumbsUp, ThumbsDown, Filter, BarChart3,
   Archive, ShieldCheck, Building2, FolderArchive, ExternalLink, X, Layers, History, CheckCircle, FileCheck2
 } from "lucide-react";
 import { Link } from "react-router-dom";
@@ -130,13 +130,6 @@ export function Dashboard() {
     return matchesSearch && matchesTab;
   });
 
-  const stats = [
-    { label: "Active Audit", value: documents.length.toString(), icon: FileCheck, color: "text-blue-600", bg: "bg-blue-50 border-blue-200/60", border: "hover:border-blue-300", accent: "from-blue-500/10 to-indigo-500/5", glow: "shadow-blue-500/5" },
-    { label: "Approved Plans", value: documents.filter(d => d.status === 'approved').length.toString(), icon: CheckCircle2, color: "text-emerald-600", bg: "bg-emerald-50 border-emerald-200/60", border: "hover:border-emerald-300", accent: "from-emerald-400/10 to-teal-500/5", glow: "shadow-emerald-500/5" },
-    { label: "Pending Review", value: documents.filter(d => d.status === 'pending').length.toString(), icon: Clock, color: "text-amber-600", bg: "bg-amber-50 border-amber-200/60", border: "hover:border-amber-300", accent: "from-amber-400/10 to-yellow-500/5", glow: "shadow-amber-500/5" },
-    { label: "Compliance Risk", value: documents.filter(d => d.status === 'rejected').length.toString(), icon: AlertCircle, color: "text-rose-600", bg: "bg-rose-50 border-rose-200/60", border: "hover:border-rose-300", accent: "from-rose-400/10 to-red-500/5", glow: "shadow-rose-500/5" },
-  ];
-
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[80vh] gap-4">
@@ -249,37 +242,6 @@ export function Dashboard() {
           <ComplianceManager onRefreshDocs={() => setRefreshTrigger(prev => prev + 1)} />
         </div>
       )}
-
-      {/* Grid Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 relative z-10">
-        {stats.map((stat, i) => (
-          <motion.div
-            key={i}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: i * 0.08 }}
-            className={cn(
-              "p-8 bg-white border border-zinc-200/80 rounded-[40px] shadow-sm hover:shadow-2xl hover:translate-y-[-4px] transition-all duration-300 group relative overflow-hidden",
-              stat.border,
-              stat.glow
-            )}
-          >
-            {/* Background color glow gradient */}
-            <div className={cn("absolute right-0 top-0 w-36 h-36 bg-gradient-to-br rounded-full blur-2xl opacity-80 pointer-events-none", stat.accent)} />
-            
-            <div className="flex items-center justify-between mb-8 relative z-10">
-              <div className={cn("w-14 h-14 rounded-2xl flex items-center justify-center transition-transform duration-300 group-hover:scale-110 group-hover:rotate-3 border", stat.bg, stat.color)}>
-                <stat.icon className="w-7 h-7" />
-              </div>
-              <div className="text-[10px] font-black text-zinc-300 group-hover:text-zinc-400 uppercase tracking-[0.2em] transition-colors">Real-time</div>
-            </div>
-            <div className="relative z-10">
-              <div className="text-5xl font-black text-[#0C1E36] mb-1.5 tracking-tighter tabular-nums">{stat.value}</div>
-              <div className="text-[10px] font-black text-zinc-400 group-hover:text-zinc-500 uppercase tracking-widest transition-colors">{stat.label}</div>
-            </div>
-          </motion.div>
-        ))}
-      </div>
 
       {/* Repository Section */}
       <div className="bg-white border border-amber-200/30 rounded-[44px] overflow-hidden shadow-xl hover:shadow-2xl transition-all duration-300 relative z-10">

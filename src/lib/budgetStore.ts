@@ -301,6 +301,39 @@ export function saveBudgetDocument(doc: BudgetDocument): void {
 }
 
 /**
+ * Calculates grand totals for an Annual Budget document.
+ */
+export function calculateBudgetGrandTotals(doc: BudgetDocument) {
+  const psTotal = (doc.gaPersonalServices || []).reduce((acc, it) => acc + (Number(it.amount) || 0), 0);
+  const mooeTotal = (doc.gaMOOE || []).reduce((acc, it) => acc + (Number(it.amount) || 0), 0);
+  const gaTotal = psTotal + mooeTotal;
+
+  let ydepTotal = 0;
+  (doc.ydepPrograms || []).forEach(prog => {
+    (prog.subcategories || []).forEach(sub => {
+      (sub.items || []).forEach(it => {
+        ydepTotal += Number(it.amount) || 0;
+      });
+    });
+  });
+
+  const totalFunds = (Number(doc.beginningBalance) || 0) + (Number(doc.tenPercentFund) || 0);
+  const totalExpenditures = gaTotal + ydepTotal;
+  const endingBalance = totalFunds - totalExpenditures;
+
+  return {
+    psTotal,
+    mooeTotal,
+    gaTotal,
+    ydepTotal,
+    totalFunds,
+    totalExpenditures,
+    grandTotal: totalExpenditures,
+    endingBalance
+  };
+}
+
+/**
  * Resets the Budget document for a barangay back to official reference default.
  */
 export function resetBudgetToDefault(

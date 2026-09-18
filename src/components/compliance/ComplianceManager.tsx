@@ -36,6 +36,17 @@ import {
   TABLE_SOURCE_CITATION, 
   DocumentFrequency 
 } from "./complianceTemplatesData";
+import { ScanCheckModal } from "./ScanCheckModal";
+import { 
+  scanEditorDocument, 
+  scanCbydpDocument, 
+  scanAbyipDocument, 
+  scanBudgetDocument, 
+  ScanCheckResult 
+} from "../../lib/documentScanner";
+import { loadCbydpDocument } from "../../lib/cbydpStore";
+import { loadAbyipDocument } from "../../lib/abyipStore";
+import { loadBudgetDocument } from "../../lib/budgetStore";
 
 const FREQUENCY_TABS = [
   "All",
@@ -64,6 +75,41 @@ export function ComplianceManager({ onRefreshDocs }: ComplianceManagerProps) {
   const [isAuditing, setIsAuditing] = useState(false);
   const [auditReport, setAuditReport] = useState<any | null>(null);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  
+  // Scan & Check modal state
+  const [isScanModalOpen, setIsScanModalOpen] = useState(false);
+  const [isScanningCheck, setIsScanningCheck] = useState(false);
+  const [scanResult, setScanResult] = useState<ScanCheckResult | null>(null);
+
+  const handleScanAndCheck = (targetDoc?: ComplianceDocument | null) => {
+    const docToScan = targetDoc || selectedDoc;
+    if (!docToScan) return;
+
+    setIsScanningCheck(true);
+    setIsScanModalOpen(true);
+
+    setTimeout(() => {
+      const bgy = docToScan.templateFields?.barangay || user?.barangayName || "Kapatagan";
+      let res: ScanCheckResult;
+
+      if (docToScan.code === "CBYDP") {
+        const cbydpDoc = loadCbydpDocument(bgy, user?.displayName, undefined);
+        res = scanCbydpDocument(cbydpDoc);
+      } else if (docToScan.code === "ABYIP") {
+        const abyipDoc = loadAbyipDocument(bgy, user?.displayName, undefined);
+        res = scanAbyipDocument(abyipDoc);
+      } else if (docToScan.code === "SKAB" || docToScan.code === "SK-AB") {
+        const budgetDoc = loadBudgetDocument(bgy, user?.displayName, undefined);
+        res = scanBudgetDocument(budgetDoc);
+      } else {
+        const compiledText = compileDocumentContent(docToScan);
+        res = scanEditorDocument(compiledText, `${docToScan.code}: ${docToScan.title}`, bgy);
+      }
+
+      setScanResult(res);
+      setIsScanningCheck(false);
+    }, 900);
+  };
   
   // Real-time Reminders list
   const [reminders, setReminders] = useState<string[]>([]);
@@ -744,17 +790,28 @@ export function ComplianceManager({ onRefreshDocs }: ComplianceManagerProps) {
                   <span className="text-[9px] text-zinc-700 font-bold">{doc.updatedBy} ({doc.lastUpdated})</span>
                 </div>
 
-                <button
-                  onClick={() => {
-                    setSelectedDoc(doc);
-                    setAuditReport(null);
-                    setIsModalOpen(true);
-                  }}
-                  className="px-4 py-2 bg-gradient-to-r from-zinc-50 to-zinc-100 border border-zinc-200 hover:border-[#0C1E36] text-[9px] font-black uppercase tracking-widest text-[#0C1E36] hover:from-[#0C1E36] hover:to-slate-800 hover:text-white rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shadow-sm"
-                >
-                  <Eye className="w-3.5 h-3.5 text-[#C89311]" />
-                  {canManage ? "Compile / Edit" : "View / Audit"}
-                </button>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => handleScanAndCheck(doc)}
+                    className="px-2.5 py-2 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 text-[8.5px] font-black uppercase tracking-wider rounded-xl transition-all cursor-pointer flex items-center gap-1 shadow-2xs"
+                    title="Scan document for completeness and statutory compliance"
+                  >
+                    <ShieldCheck className="w-3.5 h-3.5 text-amber-700" />
+                    <span>Scan & Check</span>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setSelectedDoc(doc);
+                      setAuditReport(null);
+                      setIsModalOpen(true);
+                    }}
+                    className="px-3.5 py-2 bg-gradient-to-r from-zinc-50 to-zinc-100 border border-zinc-200 hover:border-[#0C1E36] text-[8.5px] font-black uppercase tracking-widest text-[#0C1E36] hover:from-[#0C1E36] hover:to-slate-800 hover:text-white rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shadow-sm"
+                  >
+                    <Eye className="w-3.5 h-3.5 text-[#C89311]" />
+                    {canManage ? "Compile / Edit" : "View / Audit"}
+                  </button>
+                </div>
               </div>
             </motion.div>
           );
@@ -882,20 +939,39 @@ export function ComplianceManager({ onRefreshDocs }: ComplianceManagerProps) {
                       Affix signature variables and click the pre-audit advisor to evaluate document legality against national oversight policies.
                     </p>
 
+                    {/* Primary SCAN & CHECK Button */}
                     <button
-                      onClick={runAiVerification}
-                      disabled={isAuditing}
-                      className="w-full py-3 bg-[#0C1E36] hover:bg-[#C89311] text-white text-[10px] font-black uppercase tracking-widest rounded-2xl transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                      onClick={() => handleScanAndCheck(selectedDoc)}
+                      disabled={isScanningCheck}
+                      className="w-full py-3 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 text-[10px] font-black uppercase tracking-widest rounded-2xl transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 border border-amber-300"
                     >
-                      {isAuditing ? (
+                      {isScanningCheck ? (
                         <>
-                          <RefreshCw className="w-4.5 h-4.5 animate-spin" />
-                          Auditing with Explainable AI...
+                          <RefreshCw className="w-4 h-4 animate-spin text-slate-950" />
+                          <span>Scanning Document Fields & PPAs...</span>
                         </>
                       ) : (
                         <>
-                          <ShieldCheck className="w-4.5 h-4.5 text-amber-400" />
-                          Perform AI Pre-Audit Check
+                          <ShieldCheck className="w-4 h-4 text-slate-950" />
+                          <span>SCAN & CHECK (Statutory & PPA Audit)</span>
+                        </>
+                      )}
+                    </button>
+
+                    <button
+                      onClick={runAiVerification}
+                      disabled={isAuditing}
+                      className="w-full py-2.5 bg-[#0C1E36] hover:bg-[#153663] text-white text-[10px] font-black uppercase tracking-widest rounded-2xl transition-all shadow-sm flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                    >
+                      {isAuditing ? (
+                        <>
+                          <RefreshCw className="w-4 h-4 animate-spin text-amber-400" />
+                          <span>Auditing with Explainable AI...</span>
+                        </>
+                      ) : (
+                        <>
+                          <ShieldCheck className="w-4 h-4 text-amber-400" />
+                          <span>AI Pre-Audit Quick Advisor</span>
                         </>
                       )}
                     </button>
@@ -1069,6 +1145,15 @@ export function ComplianceManager({ onRefreshDocs }: ComplianceManagerProps) {
           </div>
         )}
       </AnimatePresence>
+
+      {/* Statutory Scan & Check Modal */}
+      <ScanCheckModal
+        isOpen={isScanModalOpen}
+        onClose={() => setIsScanModalOpen(false)}
+        result={scanResult}
+        isScanning={isScanningCheck}
+        onReScan={() => handleScanAndCheck(selectedDoc)}
+      />
     </div>
   );
 }

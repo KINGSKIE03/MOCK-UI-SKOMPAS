@@ -31,6 +31,8 @@ import html2canvas from "html2canvas-pro";
 import { jsPDF } from "jspdf";
 import { exportOfficialLandscapePdf } from "../lib/pdfExport";
 import { PrintPreviewModal } from "../components/PrintPreviewModal";
+import { ScanCheckModal } from "../components/compliance/ScanCheckModal";
+import { scanBudgetDocument, ScanCheckResult, ScanFinding } from "../lib/documentScanner";
 import { useAuth } from "../components/auth/AuthProvider";
 import { 
   BudgetDocument, 
@@ -140,6 +142,21 @@ export function BudgetTemplatePage() {
   const [isScanning, setIsScanning] = useState(false);
   const [complianceReport, setComplianceReport] = useState<any | null>(null);
   const [isComplianceOpen, setIsComplianceOpen] = useState(false);
+
+  // Statutory Scan & Check state
+  const [isScanModalOpen, setIsScanModalOpen] = useState(false);
+  const [isScanningCheck, setIsScanningCheck] = useState(false);
+  const [scanResult, setScanResult] = useState<ScanCheckResult | null>(null);
+
+  const handleScanAndCheck = () => {
+    setIsScanningCheck(true);
+    setIsScanModalOpen(true);
+    setTimeout(() => {
+      const result = scanBudgetDocument(doc);
+      setScanResult(result);
+      setIsScanningCheck(false);
+    }, 900);
+  };
 
   // Submission state
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -612,18 +629,20 @@ export function BudgetTemplatePage() {
               )}
             </button>
 
-            {/* AI Compliance Check */}
+            {/* SCAN & CHECK Button */}
             <button
-              onClick={handleAICanCheck}
-              disabled={isScanning}
-              className="px-3 py-2 rounded-xl text-xs font-black uppercase tracking-wider bg-gradient-to-r from-amber-500 to-amber-600 text-white hover:brightness-105 transition-all flex items-center gap-1.5 shadow-sm cursor-pointer disabled:opacity-50"
+              id="btn-scan-check-budget"
+              onClick={handleScanAndCheck}
+              disabled={isScanningCheck}
+              className="px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 hover:from-amber-400 hover:to-amber-500 transition-all flex items-center gap-1.5 shadow-md shadow-amber-950/20 active:scale-95 cursor-pointer border border-amber-300 disabled:opacity-50"
+              title="Scan entered Annual Budget, check for missing/incorrect info, statutory 15% GA cap, and analyze PPA alignment"
             >
-              {isScanning ? (
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              {isScanningCheck ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin text-slate-950" />
               ) : (
-                <Sparkles className="w-3.5 h-3.5 text-amber-200" />
+                <ShieldCheck className="w-3.5 h-3.5 text-slate-950" />
               )}
-              <span>AI Audit</span>
+              <span>SCAN & CHECK</span>
             </button>
 
             {/* Reset */}
@@ -1829,6 +1848,15 @@ export function BudgetTemplatePage() {
         pageElementsSelector=".budget-page-break"
         onExportPdf={handleExportPdf}
         isExportingPdf={isExportingPdf}
+      />
+
+      {/* Statutory Scan & Check Modal */}
+      <ScanCheckModal
+        isOpen={isScanModalOpen}
+        onClose={() => setIsScanModalOpen(false)}
+        result={scanResult}
+        isScanning={isScanningCheck}
+        onReScan={handleScanAndCheck}
       />
 
     </div>

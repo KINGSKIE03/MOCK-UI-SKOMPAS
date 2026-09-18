@@ -104,6 +104,26 @@
         "read": { "type": "boolean" }
       },
       "required": ["targetBarangay", "type", "title", "message"]
+    },
+    "DocumentVersion": {
+      "title": "Document Version Snapshot",
+      "description": "Historical snapshot of a document version allowing rollback and audit inspection.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "docType": { "type": "string", "enum": ["CBYDP", "ABYIP", "Annual Budget", "Editor Document"] },
+        "barangayName": { "type": "string" },
+        "versionNumber": { "type": "number" },
+        "versionTag": { "type": "string" },
+        "authorName": { "type": "string" },
+        "authorRole": { "type": "string" },
+        "summaryNote": { "type": "string" },
+        "totalBudget": { "type": "number" },
+        "itemsCount": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "isCurrent": { "type": "boolean" }
+      },
+      "required": ["docType", "barangayName", "versionNumber", "authorName", "createdAt"]
     }
   },
   "firestore": {
@@ -114,6 +134,10 @@
     "documents/{docId}": {
       "schema": "Document",
       "description": "Needs and budget documents."
+    },
+    "document_versions/{versionId}": {
+      "schema": "DocumentVersion",
+      "description": "Historical version snapshots for CBYDP, ABYIP, and budget documents."
     },
     "barangay_submissions/{subId}": {
       "schema": "DocumentSubmission",

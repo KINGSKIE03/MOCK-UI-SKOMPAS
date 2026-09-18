@@ -74,6 +74,17 @@ service cloud.firestore {
       allow delete: if isSignedIn() && (isLYDO() || (resource.data.authorId == request.auth.uid && resource.data.status == 'pending'));
     }
 
+    // --- Collection: Document Versions (Snapshots for CBYDP, ABYIP, Budget) ---
+    match /document_versions/{versionId} {
+      allow list, get: if isSignedIn() && (
+        isLYDO() || resource.data.barangayName == getUserBarangay()
+      );
+      allow create, update: if isSignedIn() && (
+        isLYDO() || request.resource.data.barangayName == getUserBarangay()
+      );
+      allow delete: if isLYDO();
+    }
+
     // --- Collection: Document Submissions (to LYDO) ---
     match /barangay_submissions/{subId} {
       allow list, get: if isSignedIn() && (
